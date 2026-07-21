@@ -39,7 +39,7 @@ data "bqutils_routine_parser" "test" {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_id", "list_partitions"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_id", "mydataset"),
-					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_type", "TABLE_FUNCTION"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_type", "TABLE_VALUED_FUNCTION"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "language", "SQL"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "description", "desc"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "arguments.0.name", "table_name_filter"),

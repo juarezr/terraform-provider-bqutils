@@ -75,7 +75,7 @@ func (d *RoutineParserDataSource) Schema(_ context.Context, _ datasource.SchemaR
 				Computed: true,
 			},
 			"routine_type": schema.StringAttribute{
-				MarkdownDescription: "SCALAR_FUNCTION, TABLE_FUNCTION, PROCEDURE, or AGGREGATE_FUNCTION.",
+				MarkdownDescription: "SCALAR_FUNCTION, TABLE_VALUED_FUNCTION, or PROCEDURE.",
 				Computed:            true,
 			},
 			"definition_body": schema.StringAttribute{
