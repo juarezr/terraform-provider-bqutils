@@ -122,6 +122,10 @@ func (d *RoutineParserDataSource) Schema(_ context.Context, _ datasource.SchemaR
 						"mode": schema.StringAttribute{
 							Computed: true,
 						},
+						"is_aggregate": schema.BoolAttribute{
+							MarkdownDescription: "For CREATE AGGREGATE FUNCTION parameters: false when the SQL has NOT AGGREGATE, true for aggregate parameters. Null for non-UDAF routines. google_bigquery_routine does not expose this field yet.",
+							Computed:            true,
+						},
 					},
 				},
 			},
@@ -195,6 +199,7 @@ func (d *RoutineParserDataSource) Read(ctx context.Context, req datasource.ReadR
 			"data_type":     types.StringType,
 			"argument_kind": types.StringType,
 			"mode":          types.StringType,
+			"is_aggregate":  types.BoolType,
 		},
 	}
 	argVals := make([]attr.Value, 0, len(result.Arguments))
@@ -204,6 +209,7 @@ func (d *RoutineParserDataSource) Read(ctx context.Context, req datasource.ReadR
 			"data_type":     stringOrNull(a.DataTypeJSON),
 			"argument_kind": stringOrNull(a.ArgumentKind),
 			"mode":          stringOrNull(a.Mode),
+			"is_aggregate":  boolPtrOrNull(a.IsAggregate),
 		})
 		resp.Diagnostics.Append(diags...)
 		argVals = append(argVals, obj)
@@ -243,4 +249,11 @@ func stringOrNull(s string) types.String {
 		return types.StringNull()
 	}
 	return types.StringValue(s)
+}
+
+func boolPtrOrNull(b *bool) types.Bool {
+	if b == nil {
+		return types.BoolNull()
+	}
+	return types.BoolValue(*b)
 }

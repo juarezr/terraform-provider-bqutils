@@ -244,6 +244,14 @@ func (p *parser) parseRoutineRest(res *ParseResult) (*ParseResult, error) {
 		if err != nil {
 			return nil, err
 		}
+		if res.Kind == KindAggregateFunction {
+			for i := range args {
+				if args[i].IsAggregate == nil {
+					agg := true
+					args[i].IsAggregate = &agg
+				}
+			}
+		}
 		res.Arguments = args
 	}
 
@@ -536,6 +544,9 @@ func (p *parser) parseArgument() (Argument, error) {
 			return arg, err
 		}
 		arg.ArgumentKind = "ANY_TYPE"
+		if err := p.parseOptionalNotAggregate(&arg); err != nil {
+			return arg, err
+		}
 		return arg, nil
 	}
 
@@ -563,6 +574,9 @@ func (p *parser) parseArgument() (Argument, error) {
 		}
 		arg.DataTypeJSON = js
 		arg.ArgumentKind = "FIXED_TYPE"
+		if err := p.parseOptionalNotAggregate(&arg); err != nil {
+			return arg, err
+		}
 		return arg, nil
 	}
 
@@ -572,7 +586,24 @@ func (p *parser) parseArgument() (Argument, error) {
 	}
 	arg.DataTypeJSON = js
 	arg.ArgumentKind = "FIXED_TYPE"
+	if err := p.parseOptionalNotAggregate(&arg); err != nil {
+		return arg, err
+	}
 	return arg, nil
+}
+
+// parseOptionalNotAggregate consumes a trailing "NOT AGGREGATE" clause on a UDAF parameter.
+func (p *parser) parseOptionalNotAggregate(arg *Argument) error {
+	if p.peek().kind != tokNot {
+		return nil
+	}
+	p.next()
+	if _, err := p.expect(tokAggregate, "AGGREGATE"); err != nil {
+		return err
+	}
+	agg := false
+	arg.IsAggregate = &agg
+	return nil
 }
 
 // parseTypeString reads a type expression as raw text from tokens.

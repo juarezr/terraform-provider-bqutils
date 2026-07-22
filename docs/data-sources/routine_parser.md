@@ -360,6 +360,7 @@ SELECT *
   - `data_type` (String) Standard `SqlDataType` JSON schema for the data type.
   - `argument_kind` (String) - Default value is `FIXED_TYPE`. Possible values are:`FIXED_TYPE`,`ANY_TYPE`.
   - `mode` (String)
+  - `is_aggregate` (Boolean) - For `CREATE AGGREGATE FUNCTION` parameters: `false` when the SQL includes `NOT AGGREGATE`, `true` for aggregate parameters. Null for non-UDAF routines. `google_bigquery_routine` does not expose this field yet.
 - `remote_function_options` (Attributes)
   - `connection` (String)
   - `endpoint` (String)

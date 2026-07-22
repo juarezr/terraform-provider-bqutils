@@ -93,6 +93,38 @@ data "bqutils_routine_parser" "test" {
 	})
 }
 
+func TestAccRoutineParser_aggregateNotAggregate(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: `
+data "bqutils_routine_parser" "test" {
+  sql = <<-EOF
+    CREATE AGGREGATE FUNCTION appfleet.weighted_sum
+    (
+      dividend FLOAT64,
+      divisor FLOAT64 NOT AGGREGATE
+    ) RETURNS FLOAT64 AS (
+      SUM(dividend) / divisor
+    );
+  EOF
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_id", "weighted_sum"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_id", "appfleet"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_type", "AGGREGATE_FUNCTION"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "arguments.0.name", "dividend"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "arguments.0.is_aggregate", "true"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "arguments.1.name", "divisor"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "arguments.1.is_aggregate", "false"),
+				),
+			},
+		},
+	})
+}
+
 func TestAccViewParser_simple(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: protoV6ProviderFactories(),
