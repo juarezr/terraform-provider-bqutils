@@ -13,7 +13,7 @@ Parses a BigQuery `CREATE VIEW` or `CREATE MATERIALIZED VIEW` statement.
 
 ### Loading SQL from a file to create a BigQuery view
 
-In this example, the VIEW is created in BigQuery using an SQL loaded from the following file in the Terraform module folder:
+In this example, the VIEW is created in BigQuery using SQL loaded from the following file in the Terraform module folder:
 
 ```sql
 CREATE OR REPLACE VIEW `mydataset.my_simple_view`
@@ -87,7 +87,7 @@ resource "google_bigquery_table" "simple_view" {
 
 ### Creating a MATERIALIZED VIEW in BigQuery
 
-In this example, the VIEW is created in BigQuery using an SQL loaded from the following file in the Terraform module folder:
+In this example, the MATERIALIZED VIEW is created in BigQuery using SQL loaded from the following file in the Terraform module folder:
 
 ```sql
 CREATE OR REPLACE MATERIALIZED VIEW `mydataset`.my_materialized_view

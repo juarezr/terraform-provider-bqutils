@@ -7,34 +7,34 @@ description: |-
 
 # bqutils Provider
 
-The **bqutils** provider parses BigQuery `CREATE` SQL statements for easying the creation and update of BigQuery routines and views using Terraform.
+The **bqutils** provider parses BigQuery `CREATE` SQL statements to ease creating and updating BigQuery routines and views with Terraform.
 
 ## Overview
 
-The main use case is creating and updating BigQuery routines and views using Terraform directly loading them from SQL files.
+The main use case is creating and updating BigQuery routines and views with Terraform by loading them directly from SQL files.
 
-The datasources in this provider were tailored to be used with the `google_bigquery_routine` and `google_bigquery_table` resources. They expose attributes that can be used to fill the arguments of these resources from values obtained from the parsed SQL CREATE statements.
+The data sources in this provider were tailored for use with the `google_bigquery_routine` and `google_bigquery_table` resources. They expose attributes that can fill the arguments of these resources from values obtained from the parsed SQL CREATE statements.
 
 ### Benefits
 
 Productivity gains:
 
-- The use of the datasources in this provider removes the need to manually slice the routine source code into parts like arguments, body, and return type for feeding the `google_bigquery_routine` resource.
+- Using the data sources in this provider removes the need to manually slice the routine source code into parts like arguments, body, and return type for feeding the `google_bigquery_routine` resource.
 - It also lets you use the same SQL source file to provision the routines/views with Terraform or to create them manually in the BigQuery Console.
-- You can also combine the use of the datasources in this provider with other Terraform resources to acomplish further automation like:
+- You can also combine the data sources in this provider with other Terraform resources to accomplish further automation, such as:
   - Granting access to the routines/views to other datasets or projects using the `google_bigquery_dataset_access` resource.
   - Using the `google_bigquery_routine_iam_member` resource to manage IAM permissions for the routines/views.
 
 Code maintainability gains:
 
-- The datasources in this provider take care of applying only the routines that were modified and must be applied in another environment without tracking them manually. Terraform will only modify routines that are modified.
+- The data sources in this provider help you apply only the routines that changed in each environment, without tracking them manually. Terraform updates only routines that have changed.
 - You can also use git for versioning the Terraform and SQL files, so you can track the impact of changes and bugs introduced in your routines/views.
 
 Code management gains:
 
-- The datasources in this provider allows you to keep your routines and views always up to date in all BigQuery environments you have.
-- It makes easier to manage rollout of changes to several routines or views and reduces the risk of accidental breaking due to changes forgotten.
-- It makes possible to rollback changes to a previous version of the routines or views if needed, when the Terraform and the SQL code are versioned in Git.
+- The data sources in this provider allow you to keep your routines and views always up to date in all BigQuery environments you have.
+- They make it easier to manage rollout of changes to several routines or views and reduce the risk of accidental breakage from forgotten changes.
+- They make it possible to roll back changes to a previous version of the routines or views if needed, when the Terraform and the SQL code are versioned in Git.
 
 ### Restrictions
 

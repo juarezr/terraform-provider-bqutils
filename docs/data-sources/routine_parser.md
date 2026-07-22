@@ -73,7 +73,7 @@ resource "google_bigquery_routine" "list_partitions" {
 
 ### Loading SQL from a file to create a BigQuery routine
 
-In this example, the TABLE FUNCTION is created in BigQuery using an SQL loaded from the following file in the Terraform module folder:
+In this example, the TABLE FUNCTION is created in BigQuery using SQL loaded from the following file in the Terraform module folder:
 
 ```sql
 CREATE AGGREGATE FUNCTION mydataset.scaled_sum
@@ -119,7 +119,7 @@ resource "google_bigquery_routine" "scaled_sum" {
 }
 ```
 
-### Parsing SQL and creating a JavaScript FUNCTION in BigQuery
+### Creating a JavaScript FUNCTION in BigQuery
 
 ```terraform
 # Parses a JavaScript FUNCTION from inline SQL.
@@ -162,6 +162,105 @@ resource "google_bigquery_routine" "parse_json_to_array" {
 
   return_type     = data.bqutils_routine_parser.parse_json_to_array.return_type
   definition_body = data.bqutils_routine_parser.parse_json_to_array.definition_body
+}
+```
+
+### Applying access permissions to routines by using BigQuery authorized routines
+
+When Terraform updates a BigQuery routine, any authorized-routine grants on other datasets are dropped and must be re-granted.
+
+To keep access on the routine, use a `google_bigquery_dataset_access` resource and configure its `lifecycle.replace_triggered_by` argument so that when the routine body, return type, or arguments are modified, Terraform also reapplies the routine grants.
+
+Example SQL file to create a routine (placed next to the Terraform code):
+
+```sql
+CREATE OR REPLACE TABLE FUNCTION mydataset1.list_tables
+(
+    table_name_filter STRING,
+    max_results INT64
+)
+OPTIONS (
+    description = 'Used to show tables in another dataset.'
+) AS (
+  SELECT
+    t.table_name,
+    t.table_type,
+    t.creation_time,
+    t.is_typed
+    -- Notice that the dataset of the tables is not the same as the one of the function
+  FROM `mydataset2`.INFORMATION_SCHEMA.TABLES AS t
+  WHERE t.table_name LIKE CONCAT('%', table_name_filter, '%')
+  QUALIFY ROW_NUMBER() OVER(ORDER BY t.table_name) <= max_results
+);
+```
+
+Terraform code that creates the routine and grants access to the dataset:
+
+```terraform
+# Dataset where the routine is created.
+
+data "google_bigquery_dataset" "mydataset1" {
+  dataset_id = "mydataset1"
+}
+
+# Dataset the routine reads from (authorize the routine on this dataset).
+
+data "google_bigquery_dataset" "mydataset2" {
+  dataset_id = "mydataset2"
+}
+
+# Load the routine SQL from a file in the same folder as the Terraform code.
+
+data "bqutils_routine_parser" "list_tables" {
+  sql = file("${path.module}/mydataset.list_tables.sql")
+}
+
+# Create the routine in BigQuery using the attributes parsed from the SQL file.
+
+resource "google_bigquery_routine" "list_tables" {
+  dataset_id = data.google_bigquery_dataset.mydataset1.dataset_id
+
+  routine_id   = data.bqutils_routine_parser.list_tables.routine_id
+  routine_type = data.bqutils_routine_parser.list_tables.routine_type
+  language     = data.bqutils_routine_parser.list_tables.language
+
+  dynamic "arguments" {
+    for_each = data.bqutils_routine_parser.list_tables.arguments
+    content {
+      name          = arguments.value.name
+      argument_kind = arguments.value.argument_kind
+      data_type     = arguments.value.data_type
+    }
+  }
+
+  return_type     = data.bqutils_routine_parser.list_tables.return_type
+  definition_body = data.bqutils_routine_parser.list_tables.definition_body
+}
+
+# Grant authorized-routine access on mydataset2 when the SQL text of the routine changes.
+
+resource "google_bigquery_dataset_access" "list_tables" {
+  dataset_id = data.google_bigquery_dataset.mydataset2.dataset_id
+
+  routine {
+    project_id = google_bigquery_routine.list_tables.project
+    dataset_id = google_bigquery_routine.list_tables.dataset_id
+    routine_id = google_bigquery_routine.list_tables.routine_id
+  }
+
+  lifecycle {
+    replace_triggered_by = [
+      google_bigquery_routine.list_tables.definition_body,
+      google_bigquery_routine.list_tables.return_type,
+      google_bigquery_routine.list_tables.arguments
+    ]
+  }
+
+  depends_on = [
+    data.google_bigquery_dataset.mydataset1,
+    data.google_bigquery_dataset.mydataset2,
+    data.bqutils_routine_parser.list_tables
+  ]
 }
 ```
 
