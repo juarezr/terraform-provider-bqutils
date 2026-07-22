@@ -20,8 +20,8 @@ func TestParseTableFunction(t *testing.T) {
       FROM x
       WHERE partition_id != '__NULL__'  -- comment
         AND t.table_name = table_name_filter
-    );
-`
+    );`
+
 	res, err := ParseRoutine(sql, Options{TrimBody: true, TrimComments: false})
 	if err != nil {
 		t.Fatal(err)
@@ -63,8 +63,8 @@ func TestParseJSFunction(t *testing.T) {
       } catch (e) {
         return [];
       }
-    """;
-`
+    """;`
+
 	res, err := ParseRoutine(sql, Options{TrimBody: true})
 	if err != nil {
 		t.Fatal(err)
@@ -91,8 +91,8 @@ func TestParseAggregateFunction(t *testing.T) {
       divisor FLOAT64
     ) RETURNS FLOAT64 AS (
       SUM(dividend) / SUM(divisor)
-    );
-`
+    );`
+
 	res, err := ParseRoutine(sql, Options{TrimBody: true})
 	if err != nil {
 		t.Fatal(err)
@@ -128,8 +128,8 @@ func TestParseAggregateFunctionNotAggregate(t *testing.T) {
       divisor FLOAT64 NOT AGGREGATE
     ) RETURNS FLOAT64 AS (
       SUM(dividend) / divisor
-    );
-`
+    );`
+
 	res, err := ParseRoutine(sql, Options{TrimBody: true})
 	if err != nil {
 		t.Fatal(err)
@@ -165,8 +165,8 @@ func TestParseAggregateFunctionNotAggregateFirstArg(t *testing.T) {
       value FLOAT64
     ) RETURNS FLOAT64 AS (
       SUM(value) * scale
-    );
-`
+    );`
+
 	res, err := ParseRoutine(sql, Options{TrimBody: true})
 	if err != nil {
 		t.Fatal(err)
@@ -184,9 +184,8 @@ func TestParseAggregateFunctionNotAggregateFirstArg(t *testing.T) {
 
 func TestParseScalarFunctionNotAggregateSuffix(t *testing.T) {
 	// Suffix is accepted whenever present after a type (DDL surface); non-UDAF leaves IsAggregate=false only.
-	sql := `
-    CREATE FUNCTION mydataset.f(x INT64 NOT AGGREGATE) RETURNS INT64 AS (x);
-`
+	sql := `CREATE FUNCTION mydataset.f(x INT64 NOT AGGREGATE) RETURNS INT64 AS (x);`
+
 	res, err := ParseRoutine(sql, Options{TrimBody: true})
 	if err != nil {
 		t.Fatal(err)
@@ -223,8 +222,8 @@ func TestParseView(t *testing.T) {
       description="Simple view created by Terraform"
     ) AS
       SELECT TABLE_SCHEMA, TABLE_NAME
-      FROM mydataset.INFORMATION_SCHEMA.TABLES;
-`
+      FROM mydataset.INFORMATION_SCHEMA.TABLES;`
+
 	res, err := ParseView(sql, Options{TrimBody: true})
 	if err != nil {
 		t.Fatal(err)
@@ -265,8 +264,8 @@ func TestParseMaterializedView(t *testing.T) {
       labels=[("org_unit", "development")]
     ) AS
       SELECT TABLE_SCHEMA, TABLE_NAME
-      FROM mydataset.INFORMATION_SCHEMA.TABLES;
-`
+      FROM mydataset.INFORMATION_SCHEMA.TABLES;`
+
 	res, err := ParseView(sql, Options{TrimBody: true})
 	if err != nil {
 		t.Fatal(err)
@@ -304,8 +303,8 @@ func TestParseMaterializedViewSimpleInterval(t *testing.T) {
       description="mv",
       max_staleness=INTERVAL 90 MINUTE
     ) AS
-      SELECT 1 AS x;
-`
+      SELECT 1 AS x;`
+
 	res, err := ParseView(sql, Options{TrimBody: true})
 	if err != nil {
 		t.Fatal(err)
