@@ -164,7 +164,7 @@ resource "google_bigquery_table" "materialized_view" {
 - `enable_refresh` (Boolean)
 - `allow_non_incremental_definition` (Boolean)
 - `refresh_interval_ms` (Number) Converted from `refresh_interval_minutes` when present.
-- `max_staleness` (String)
+- `max_staleness` (String) IntervalValue encoding (`Y-M D H:M:S`) for `google_bigquery_table.max_staleness`. SQL `INTERVAL` options such as `INTERVAL 90 MINUTE` or `INTERVAL "4:0:0" HOUR TO SECOND` are converted automatically.
 - `kms_key_name` (String)
 - `partitioning_type` (String)
 - `partitioning_field` (String)

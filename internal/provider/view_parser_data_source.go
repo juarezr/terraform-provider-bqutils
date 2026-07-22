@@ -83,7 +83,10 @@ func (d *ViewParserDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 			"enable_refresh":                   schema.BoolAttribute{Computed: true},
 			"allow_non_incremental_definition": schema.BoolAttribute{Computed: true},
 			"refresh_interval_ms":              schema.Int64Attribute{Computed: true},
-			"max_staleness":                    schema.StringAttribute{Computed: true},
+			"max_staleness": schema.StringAttribute{
+				MarkdownDescription: "IntervalValue encoding (Y-M D H:M:S) for google_bigquery_table. SQL INTERVAL options are converted automatically.",
+				Computed:            true,
+			},
 			"kms_key_name":                     schema.StringAttribute{Computed: true},
 			"partitioning_type":                schema.StringAttribute{Computed: true},
 			"partitioning_field":               schema.StringAttribute{Computed: true},

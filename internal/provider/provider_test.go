@@ -192,3 +192,29 @@ data "bqutils_view_parser" "test" {
 		},
 	})
 }
+
+func TestAccViewParser_maxStalenessSimpleInterval(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: `
+data "bqutils_view_parser" "test" {
+  sql = <<-EOF
+    CREATE OR REPLACE MATERIALIZED VIEW mydataset.mv
+    OPTIONS(
+      description="mv",
+      max_staleness=INTERVAL 90 MINUTE
+    ) AS
+      SELECT 1 AS x;
+  EOF
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "is_materialized", "true"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "max_staleness", "0-0 0 1:30:0"),
+				),
+			},
+		},
+	})
+}

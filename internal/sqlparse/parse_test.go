@@ -292,6 +292,30 @@ func TestParseMaterializedView(t *testing.T) {
 	if res.KmsKeyName != "projects/123/key" {
 		t.Fatalf("kms=%s", res.KmsKeyName)
 	}
+	if res.MaxStaleness != "0-0 0 4:0:0" {
+		t.Fatalf("max_staleness=%q", res.MaxStaleness)
+	}
+}
+
+func TestParseMaterializedViewSimpleInterval(t *testing.T) {
+	sql := `
+    CREATE OR REPLACE MATERIALIZED VIEW mydataset.mv
+    OPTIONS(
+      description="mv",
+      max_staleness=INTERVAL 90 MINUTE
+    ) AS
+      SELECT 1 AS x;
+`
+	res, err := ParseView(sql, Options{TrimBody: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.IsMaterialized {
+		t.Fatal("expected materialized")
+	}
+	if res.MaxStaleness != "0-0 0 1:30:0" {
+		t.Fatalf("max_staleness=%q", res.MaxStaleness)
+	}
 }
 
 func TestTypeJSON(t *testing.T) {

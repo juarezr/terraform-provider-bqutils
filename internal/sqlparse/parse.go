@@ -734,7 +734,7 @@ func (p *parser) parseOptions(res *ParseResult) error {
 				res.RefreshIntervalMs = &ms
 			}
 		case "max_staleness":
-			res.MaxStaleness = v
+			res.MaxStaleness = normalizeMaxStaleness(v)
 		case "kms_key_name":
 			res.KmsKeyName = v
 		case "labels":
