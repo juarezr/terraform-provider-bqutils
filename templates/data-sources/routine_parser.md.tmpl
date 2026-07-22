@@ -7,7 +7,7 @@ description: |-
 
 # {{.Name}}
 
-This data source parses a BigQuery CREATE SQL statement from a string and supplies its parts as attributes that can be used to fill the arguments of the BigQuery Terraform `google_bigquery_routine` resource.
+Parses a BigQuery `CREATE FUNCTION` or `CREATE PROCEDURE` SQL statement and exposes their values in attributes so they can be used fill the arguments of the [google_bigquery_routine](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_routine) resource that will create the views in BigQuery.
 
 ## Caveats
 
@@ -20,19 +20,21 @@ This data source parses a BigQuery CREATE SQL statement from a string and suppli
 
 In this example, the TABLE FUNCTION is created in BigQuery using an inline SQL statement inside the Terraform code:
 
-{{ tffile "examples/data-sources/bqutils_routine_parser/data-source.tf" }}
+{{ tffile "examples/data-sources/bqutils_routine_parser/data-source.inline.tf" }}
 
 ### Loading SQL from a file to create a BigQuery routine
 
-In this example, the TABLE FUNCTION is created in BigQuery using SQL loaded from the following file in the Terraform module folder:
+In this example, the TABLE FUNCTION is created in BigQuery using the content loaded from a file in the same Terraform module folder containing a SQL statement like this:
 
 {{ codefile "sql" "examples/data-sources/bqutils_routine_parser/mydataset.scaled_sum.sql" }}
 
-The Terraform code to create the TABLE FUNCTION is:
+The code uses the Terraform [file](https://developer.hashicorp.com/terraform/language/functions/file) function to read the SQL and wire in the code to to the datasource and resources to create the TABLE FUNCTION in BigQuery as follows:
 
 {{ tffile "examples/data-sources/bqutils_routine_parser/data-source.file.tf" }}
 
 ### Creating a JavaScript FUNCTION in BigQuery
+
+Handling routines written in JavaScript or Python is straightforward as the SQL statement will embed the JavaScript/Python code like inlined in this example:
 
 {{ tffile "examples/data-sources/bqutils_routine_parser/data-source.javascript.tf" }}
 
@@ -40,7 +42,7 @@ The Terraform code to create the TABLE FUNCTION is:
 
 When Terraform updates a BigQuery routine, any authorized-routine grants on other datasets are dropped and must be re-granted.
 
-To keep access on the routine, use a `google_bigquery_dataset_access` resource and configure its `lifecycle.replace_triggered_by` argument so that when the routine body, return type, or arguments are modified, Terraform also reapplies the routine grants.
+To keep access on the routine, use a [google_bigquery_dataset_access](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_dataset_access) resource and configure its `lifecycle.replace_triggered_by` argument so that when the routine body, return type, or arguments are modified, Terraform also reapplies the routine grants.
 
 Example SQL file to create a routine (placed next to the Terraform code):
 

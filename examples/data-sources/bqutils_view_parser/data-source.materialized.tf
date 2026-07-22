@@ -1,7 +1,8 @@
 # Load the MATERIALIZED VIEW SQL from a file in the same folder as the Terraform code.
-
 data "bqutils_view_parser" "example" {
   sql = file("${path.module}/mydataset.my_materialized_view.sql")
+
+  trim_body = true
 }
 
 # Get the BigQuery dataset to create the MATERIALIZED VIEW in.
@@ -10,7 +11,6 @@ data "google_bigquery_dataset" "mydataset" {
 }
 
 # Create the MATERIALIZED VIEW in BigQuery using the attributes parsed from the SQL file.
-
 resource "google_bigquery_table" "materialized_view" {
   dataset_id = data.google_bigquery_dataset.mydataset.dataset_id
 
@@ -41,8 +41,4 @@ resource "google_bigquery_table" "materialized_view" {
   encryption_configuration {
     kms_key_name = data.bqutils_view_parser.materialized_view.kms_key_name
   }
-
-  depends_on = [
-    data.google_bigquery_dataset.mydataset
-  ]
 }

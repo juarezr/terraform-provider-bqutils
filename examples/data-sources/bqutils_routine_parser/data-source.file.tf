@@ -1,13 +1,16 @@
-# Load SQL from a file (place mydataset.scaled_sum.sql next to this module).
-
+# Load the AGGREGATE FUNCTION SQL from a file in the same folder as the Terraform code.
 data "bqutils_routine_parser" "scaled_sum" {
   sql = file("${path.module}/mydataset.scaled_sum.sql")
+
+  trim_body = true
 }
 
+# Gets the BigQuery dataset where the routine is created.
 data "google_bigquery_dataset" "mydataset" {
   dataset_id = "mydataset"
 }
 
+# Create the routine in BigQuery using the attributes parsed from the SQL file.
 resource "google_bigquery_routine" "scaled_sum" {
   dataset_id = data.google_bigquery_dataset.mydataset.dataset_id
 
