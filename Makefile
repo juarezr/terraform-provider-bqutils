@@ -46,6 +46,7 @@ check:
 .PHONY: docs
 docs:
 	go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs generate --provider-name bqutils
+	go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate --provider-name bqutils
 
 .PHONY: clean
 clean:
