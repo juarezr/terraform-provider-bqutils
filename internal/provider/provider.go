@@ -31,7 +31,7 @@ func (p *BqutilsProvider) Metadata(_ context.Context, _ provider.MetadataRequest
 
 func (p *BqutilsProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "The bqutils provider parses BigQuery CREATE SQL statements and exposes Terraform data source attributes that map to google_bigquery_routine and google_bigquery_table. It does not call Google Cloud APIs and requires no provider configuration.",
+		MarkdownDescription: "The bqutils provider automates the creation and update of BigQuery functions/procedures/views using `CREATE` SQL statements stored in files, aiming to reduce the effort required to manage the source code of these objects.",
 		Attributes:          map[string]schema.Attribute{},
 	}
 }

@@ -50,7 +50,7 @@ func (d *RoutineParserDataSource) Schema(_ context.Context, _ datasource.SchemaR
 		MarkdownDescription: "Parses a BigQuery CREATE SQL statement from a string and supplies its parts as attributes for google_bigquery_routine. Main use case: create and update BigQuery routines from SQL files with Terraform.",
 		Attributes: map[string]schema.Attribute{
 			"sql": schema.StringAttribute{
-				MarkdownDescription: "Full CREATE statement SQL text.",
+				MarkdownDescription: "SQL text containing the CREATE FUNCTION or CREATE PROCEDURE statement to be parsed.",
 				Required:            true,
 			},
 			"trim_body": schema.BoolAttribute{
@@ -119,16 +119,16 @@ func (d *RoutineParserDataSource) Schema(_ context.Context, _ datasource.SchemaR
 				Computed:            true,
 			},
 			"arguments": schema.ListNestedAttribute{
-				MarkdownDescription: "Routine arguments parsed from the CREATE statement.",
+				MarkdownDescription: "Routine arguments parsed from the SQL CREATE FUNCTION or CREATE PROCEDURE statement.",
 				Computed:            true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"name": schema.StringAttribute{
-							MarkdownDescription: "The name of this argument.",
+							MarkdownDescription: "The name of the routine argument.",
 							Computed:            true,
 						},
 						"data_type": schema.StringAttribute{
-							MarkdownDescription: "StandardSqlDataType JSON schema for the data type.",
+							MarkdownDescription: "Standard SqlDataType as JSON schema of the argument data type.",
 							Computed:            true,
 						},
 						"argument_kind": schema.StringAttribute{
@@ -140,7 +140,7 @@ func (d *RoutineParserDataSource) Schema(_ context.Context, _ datasource.SchemaR
 							Computed:            true,
 						},
 						"is_aggregate": schema.BoolAttribute{
-							MarkdownDescription: "For CREATE AGGREGATE FUNCTION parameters: false when the SQL includes NOT AGGREGATE, true for aggregate parameters. Null for non-UDAF routines. google_bigquery_routine does not expose this field yet.",
+							MarkdownDescription: "Gives `True` when the SQL includes NOT AGGREGATE in CREATE AGGREGATE FUNCTION routines, `False` otherwise and `Null` for non-UDAF routines. google_bigquery_routine does not expose this field yet.",
 							Computed:            true,
 						},
 					},
@@ -161,7 +161,7 @@ func (d *RoutineParserDataSource) Schema(_ context.Context, _ datasource.SchemaR
 				},
 			},
 			"spark_options": schema.SingleNestedAttribute{
-				MarkdownDescription: "If language is PYTHON, JAVA, or SCALA, options for a Spark stored procedure.",
+				MarkdownDescription: "If language is PYTHON, JAVA, or SCALA, then it returns the Spark options of the routine.",
 				Computed:            true,
 				Attributes: map[string]schema.Attribute{
 					"raw": schema.StringAttribute{
