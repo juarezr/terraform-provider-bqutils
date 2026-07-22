@@ -111,7 +111,7 @@ go test ./internal/sqlparse/ -v
 # Acceptance tests (requires terraform on PATH)
 TF_ACC=1 go test ./internal/provider/ -v -count=1
 
-# Regenerate goyacc grammar + docs tooling
+# Install docs tooling and regenerate provider docs
 make tools
 make generate
 ```

@@ -6,7 +6,7 @@ import (
 	"unicode/utf8"
 )
 
-// token kinds used by the hand-written + goyacc-facing lexer
+// token kinds used by the hand-written lexer
 const (
 	tokEOF = iota
 	tokIdent

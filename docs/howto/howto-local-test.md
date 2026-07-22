@@ -11,7 +11,7 @@ You can run it fully offline with either a **filesystem mirror install** (availa
 ### Option A — `make install` (filesystem mirror)
 
 ```bash
-cd /home/juarezr/src/github/mine/terraform-provider-bigquery-utils
+cd ~/src/terraform-provider-bqutils
 make install
 ```
 
@@ -48,7 +48,7 @@ Create or edit `~/.terraformrc`:
 ```hcl
 provider_installation {
   dev_overrides {
-    "juarezr/bqutils" = "/home/juarezr/src/github/mine/terraform-provider-bigquery-utils"
+    "juarezr/bqutils" = "~/.terraform.d/plugins/registry.terraform.io/juarezr/bqutils/0.1.0/linux_amd64/terraform-provider-bqutils"
   }
   direct {}
 }
@@ -57,7 +57,7 @@ provider_installation {
 Rebuild after changes:
 
 ```bash
-cd /home/juarezr/src/github/mine/terraform-provider-bigquery-utils
+cd ~/src/github/mine/terraform-provider-bigquery-utils
 go build -o terraform-provider-bqutils .
 ```
 
