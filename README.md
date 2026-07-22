@@ -1,8 +1,6 @@
 # terraform-provider-bqutils
 
-Terraform provider utilities that parse BigQuery `CREATE` SQL and expose attributes for wiring into [`hashicorp/google`](https://registry.terraform.io/providers/hashicorp/google/latest) resources (`google_bigquery_routine`, `google_bigquery_table`).
-
-No Google Cloud API calls are made. The provider only parses strings.
+Terraform provider that parse `CREATE` SQL statements to make easier to create BigQuery routines and views with the [`hashicorp/google`](https://registry.terraform.io/providers/hashicorp/google/latest) provider.
 
 ## Requirements
 
@@ -24,21 +22,17 @@ terraform {
 provider "bqutils" {}
 ```
 
-No configuration arguments are required.
+No provider settings are required.
 
 ## Data sources
 
 ### `bqutils_routine_parser`
 
-Parses `CREATE FUNCTION` / `TABLE FUNCTION` / `PROCEDURE` / `AGGREGATE FUNCTION` and fills attributes for `google_bigquery_routine`.
-
-TEMPORARY routines are rejected with an error (they cannot be managed as persistent BigQuery objects).
+Parses `CREATE FUNCTION` / `TABLE FUNCTION` / `PROCEDURE` / `AGGREGATE FUNCTION` and fills attributes for [google_bigquery_routine](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_routine#nested_arguments).
 
 ### `bqutils_view_parser`
 
-Parses `CREATE VIEW` / `MATERIALIZED VIEW` and fills attributes for `google_bigquery_table` (including `view` / `materialized_view` blocks, partitioning, clustering, labels, etc.).
-
-Unmappable `OPTIONS` (for example `retain_partitions`) are ignored.
+Parses `CREATE VIEW` / `MATERIALIZED VIEW` and supplies attributes for creating a view with the `google_bigquery_table` resource (including `view` / `materialized_view` blocks, partitioning, clustering, labels, etc.).
 
 ## Example (SQL from a file)
 
@@ -67,18 +61,10 @@ resource "google_bigquery_routine" "fn" {
 }
 ```
 
-See [`examples/`](examples/) and [`samples/`](samples/) for more patterns (including views and materialized views).
+## Documentation
 
-## Optional inputs
-
-| Argument | Default | Meaning |
-|----------|---------|---------|
-| `trim_body` | `true` | Trim leading/trailing whitespace and empty lines from the body/`query` |
-| `trim_comments` | `false` | Strip `--` / `/* */` comments from the body/`query` |
-
-Computed helpers include `project` / `dataset_id` when present in a qualified object name, and `is_materialized` on the view parser.
-
-`return_type` / argument `data_type` values are StandardSqlDataType **JSON** strings as required by `google_bigquery_routine`.
+- See [`examples/`](examples/) folder for more patterns (including views and materialized views).
+- Check the [provider documentation](https://registry.terraform.io/providers/juarezr/bqutils/latest/docs) on the Terraform Registry.
 
 ## Building and testing
 
