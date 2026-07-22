@@ -7,7 +7,7 @@ type ObjectKind string
 
 const (
 	KindScalarFunction    ObjectKind = "SCALAR_FUNCTION"
-	KindTableFunction     ObjectKind = "TABLE_FUNCTION"
+	KindTableFunction     ObjectKind = "TABLE_VALUED_FUNCTION"
 	KindProcedure         ObjectKind = "PROCEDURE"
 	KindAggregateFunction ObjectKind = "AGGREGATE_FUNCTION"
 	KindView              ObjectKind = "VIEW"
@@ -20,6 +20,9 @@ type Argument struct {
 	DataTypeJSON string
 	ArgumentKind string // FIXED_TYPE, ANY_TYPE
 	Mode         string // IN, OUT, INOUT
+	// IsAggregate mirrors BigQuery Argument.is_aggregate for UDAF parameters.
+	// nil = unspecified (non-UDAF); false = NOT AGGREGATE; true = aggregate parameter.
+	IsAggregate *bool
 }
 
 // ColumnDef is a view column list entry.

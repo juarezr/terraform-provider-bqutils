@@ -8,8 +8,9 @@ import (
 
 // Options controls post-processing of the parsed body.
 type Options struct {
-	TrimBody     bool
-	TrimComments bool
+	TrimBody        bool
+	TrimComments    bool
+	TrimIndentation bool
 }
 
 // Parse parses a single BigQuery CREATE routine or view statement.
@@ -46,6 +47,10 @@ func Parse(sql string, opts Options) (*ParseResult, error) {
 	body := res.DefinitionBody
 	if res.Query != "" {
 		body = res.Query
+	}
+	// Indentation first so common leading whitespace is still present on all lines.
+	if opts.TrimIndentation {
+		body = TrimIndentation(body)
 	}
 	if opts.TrimComments {
 		body = TrimComments(body)
@@ -243,6 +248,14 @@ func (p *parser) parseRoutineRest(res *ParseResult) (*ParseResult, error) {
 		args, err := p.parseArgumentList()
 		if err != nil {
 			return nil, err
+		}
+		if res.Kind == KindAggregateFunction {
+			for i := range args {
+				if args[i].IsAggregate == nil {
+					agg := true
+					args[i].IsAggregate = &agg
+				}
+			}
 		}
 		res.Arguments = args
 	}
@@ -536,6 +549,9 @@ func (p *parser) parseArgument() (Argument, error) {
 			return arg, err
 		}
 		arg.ArgumentKind = "ANY_TYPE"
+		if err := p.parseOptionalNotAggregate(&arg); err != nil {
+			return arg, err
+		}
 		return arg, nil
 	}
 
@@ -563,6 +579,9 @@ func (p *parser) parseArgument() (Argument, error) {
 		}
 		arg.DataTypeJSON = js
 		arg.ArgumentKind = "FIXED_TYPE"
+		if err := p.parseOptionalNotAggregate(&arg); err != nil {
+			return arg, err
+		}
 		return arg, nil
 	}
 
@@ -572,7 +591,24 @@ func (p *parser) parseArgument() (Argument, error) {
 	}
 	arg.DataTypeJSON = js
 	arg.ArgumentKind = "FIXED_TYPE"
+	if err := p.parseOptionalNotAggregate(&arg); err != nil {
+		return arg, err
+	}
 	return arg, nil
+}
+
+// parseOptionalNotAggregate consumes a trailing "NOT AGGREGATE" clause on a UDAF parameter.
+func (p *parser) parseOptionalNotAggregate(arg *Argument) error {
+	if p.peek().kind != tokNot {
+		return nil
+	}
+	p.next()
+	if _, err := p.expect(tokAggregate, "AGGREGATE"); err != nil {
+		return err
+	}
+	agg := false
+	arg.IsAggregate = &agg
+	return nil
 }
 
 // parseTypeString reads a type expression as raw text from tokens.
@@ -703,7 +739,7 @@ func (p *parser) parseOptions(res *ParseResult) error {
 				res.RefreshIntervalMs = &ms
 			}
 		case "max_staleness":
-			res.MaxStaleness = v
+			res.MaxStaleness = normalizeMaxStaleness(v)
 		case "kms_key_name":
 			res.KmsKeyName = v
 		case "labels":

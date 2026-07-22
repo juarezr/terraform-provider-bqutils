@@ -19,6 +19,65 @@ func TrimBody(s string) string {
 	return strings.Join(lines, "\n")
 }
 
+// TrimIndentation removes the common first-level leading whitespace from every
+// non-empty line (classic dedent). Deeper indentation relative to that first
+// level is preserved. Blank lines are ignored when computing the common indent.
+func TrimIndentation(s string) string {
+	lines := strings.Split(s, "\n")
+	indent := ""
+	found := false
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		leading := leadingWhitespace(line)
+		if !found {
+			indent = leading
+			found = true
+			continue
+		}
+		indent = commonLeadingWhitespace(indent, leading)
+		if indent == "" {
+			return s
+		}
+	}
+	if !found || indent == "" {
+		return s
+	}
+	out := make([]string, len(lines))
+	for i, line := range lines {
+		if strings.HasPrefix(line, indent) {
+			out[i] = line[len(indent):]
+			continue
+		}
+		out[i] = line
+	}
+	return strings.Join(out, "\n")
+}
+
+func leadingWhitespace(s string) string {
+	i := 0
+	for i < len(s) {
+		if s[i] != ' ' && s[i] != '\t' {
+			break
+		}
+		i++
+	}
+	return s[:i]
+}
+
+func commonLeadingWhitespace(a, b string) string {
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
+	}
+	i := 0
+	for i < n && a[i] == b[i] {
+		i++
+	}
+	return a[:i]
+}
+
 // TrimComments removes -- and /* */ comments from SQL body text, preserving string literals.
 func TrimComments(s string) string {
 	var b strings.Builder

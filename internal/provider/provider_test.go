@@ -21,25 +21,26 @@ func TestAccRoutineParser_tableFunction(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: `
-data "bqutils_routine_parser" "test" {
-  sql = <<-EOF
-    CREATE OR REPLACE TABLE FUNCTION mydataset.list_partitions
-    (
-        table_name_filter STRING
-    )
-    OPTIONS (
-      description = 'desc'
-    ) AS (
-      SELECT 1
-    );
-  EOF
-  trim_comments = false
-}
-`,
+					data "bqutils_routine_parser" "test" {
+					sql = <<-EOF
+						CREATE OR REPLACE TABLE FUNCTION mydataset.list_partitions
+						(
+							table_name_filter STRING
+						)
+						OPTIONS (
+						description = 'desc'
+						) AS (
+						SELECT 1
+						);
+					EOF
+					trim_comments = false
+					}`,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_id", "list_partitions"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_id", "mydataset"),
-					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_type", "TABLE_FUNCTION"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "id", "projects/any/datasets/mydataset/routines/list_partitions"),
+					resource.TestCheckNoResourceAttr("data.bqutils_routine_parser.test", "project"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_type", "TABLE_VALUED_FUNCTION"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "language", "SQL"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "description", "desc"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "arguments.0.name", "table_name_filter"),
@@ -55,22 +56,46 @@ func TestAccRoutineParser_jsFunction(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: `
-data "bqutils_routine_parser" "test" {
-  sql = <<-EOF
-    CREATE OR REPLACE FUNCTION parse_json_to_array(json_str STRING)
-    RETURNS ARRAY<STRING>
-    LANGUAGE js AS r"""
-      return [];
-    """;
-  EOF
-  trim_body = true
-}
-`,
+					data "bqutils_routine_parser" "test" {
+					sql = <<-EOF
+						CREATE OR REPLACE FUNCTION parse_json_to_array(json_str STRING)
+						RETURNS ARRAY<STRING>
+						LANGUAGE js AS r"""
+						return [];
+						""";
+					EOF
+					trim_body = true
+					}`,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_id", "parse_json_to_array"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "id", "projects/any/datasets/any/routines/parse_json_to_array"),
+					resource.TestCheckNoResourceAttr("data.bqutils_routine_parser.test", "project"),
+					resource.TestCheckNoResourceAttr("data.bqutils_routine_parser.test", "dataset_id"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_type", "SCALAR_FUNCTION"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "language", "JAVASCRIPT"),
 					resource.TestCheckResourceAttrSet("data.bqutils_routine_parser.test", "return_type"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccRoutineParser_idFullyQualified(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: `
+					data "bqutils_routine_parser" "test" {
+					sql = <<-EOF
+						CREATE FUNCTION ` + "`myproj.mydataset.fn`" + `(x INT64) RETURNS INT64 AS (x);
+					EOF
+					}`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_id", "fn"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "project", "myproj"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_id", "mydataset"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "id", "projects/myproj/datasets/mydataset/routines/fn"),
 				),
 			},
 		},
@@ -83,11 +108,41 @@ func TestAccRoutineParser_tempError(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: `
-data "bqutils_routine_parser" "test" {
-  sql = "CREATE TEMP FUNCTION foo(x INT64) AS (x);"
-}
-`,
+					data "bqutils_routine_parser" "test" {
+						sql = "CREATE TEMP FUNCTION foo(x INT64) AS (x);"
+					}`,
 				ExpectError: regexp.MustCompile(`TEMP`),
+			},
+		},
+	})
+}
+
+func TestAccRoutineParser_aggregateNotAggregate(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: `
+					data "bqutils_routine_parser" "test" {
+					sql = <<-EOF
+						CREATE AGGREGATE FUNCTION appfleet.weighted_sum
+						(
+						dividend FLOAT64,
+						divisor FLOAT64 NOT AGGREGATE
+						) RETURNS FLOAT64 AS (
+						SUM(dividend) / divisor
+						);
+					EOF
+					}`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_id", "weighted_sum"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_id", "appfleet"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_type", "AGGREGATE_FUNCTION"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "arguments.0.name", "dividend"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "arguments.0.is_aggregate", "true"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "arguments.1.name", "divisor"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "arguments.1.is_aggregate", "false"),
+				),
 			},
 		},
 	})
@@ -99,22 +154,23 @@ func TestAccViewParser_simple(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: `
-data "bqutils_view_parser" "test" {
-  sql = <<-EOF
-    CREATE OR REPLACE VIEW IF NOT EXISTS ` + "`mydataset.my_simple_view`" + `
-    (
-      TABLE_SCHEMA OPTIONS(description="schema"),
-      TABLE_NAME OPTIONS(description="name")
-    ) OPTIONS(
-      description="Simple view"
-    ) AS
-      SELECT TABLE_SCHEMA, TABLE_NAME FROM t;
-  EOF
-}
-`,
+					data "bqutils_view_parser" "test" {
+					sql = <<-EOF
+						CREATE OR REPLACE VIEW IF NOT EXISTS ` + "`mydataset.my_simple_view`" + `
+						(
+						TABLE_SCHEMA OPTIONS(description="schema"),
+						TABLE_NAME OPTIONS(description="name")
+						) OPTIONS(
+						description="Simple view"
+						) AS
+						SELECT TABLE_SCHEMA, TABLE_NAME FROM t;
+					EOF
+					}`,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "table_id", "my_simple_view"),
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "dataset_id", "mydataset"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "id", "projects/any/datasets/mydataset/tables/my_simple_view"),
+					resource.TestCheckNoResourceAttr("data.bqutils_view_parser.test", "project"),
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "is_materialized", "false"),
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "description", "Simple view"),
 					resource.TestCheckResourceAttrSet("data.bqutils_view_parser.test", "schema"),
@@ -131,23 +187,22 @@ func TestAccViewParser_materialized(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: `
-data "bqutils_view_parser" "test" {
-  sql = <<-EOF
-    CREATE OR REPLACE MATERIALIZED VIEW IF NOT EXISTS ` + "`mydataset.mv`" + `
-    PARTITION BY DATE(CREATED)
-    CLUSTER BY A, B
-    OPTIONS(
-      description="mv",
-      enable_refresh=TRUE,
-      allow_non_incremental_definition=FALSE,
-      refresh_interval_minutes=60,
-      kms_key_name="projects/x/key",
-      labels=[("org_unit", "development")]
-    ) AS
-      SELECT 1 AS A, 2 AS B, CURRENT_TIMESTAMP() AS CREATED;
-  EOF
-}
-`,
+					data "bqutils_view_parser" "test" {
+					sql = <<-EOF
+						CREATE OR REPLACE MATERIALIZED VIEW IF NOT EXISTS ` + "`mydataset.mv`" + `
+						PARTITION BY DATE(CREATED)
+						CLUSTER BY A, B
+						OPTIONS(
+						description="mv",
+						enable_refresh=TRUE,
+						allow_non_incremental_definition=FALSE,
+						refresh_interval_minutes=60,
+						kms_key_name="projects/x/key",
+						labels=[("org_unit", "development")]
+						) AS
+						SELECT 1 AS A, 2 AS B, CURRENT_TIMESTAMP() AS CREATED;
+					EOF
+					}`,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "is_materialized", "true"),
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "partitioning_type", "DAY"),
@@ -155,6 +210,75 @@ data "bqutils_view_parser" "test" {
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "refresh_interval_ms", "3600000"),
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "labels.org_unit", "development"),
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "clustering.0", "A"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccViewParser_maxStalenessSimpleInterval(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: `
+					data "bqutils_view_parser" "test" {
+					sql = <<-EOF
+						CREATE OR REPLACE MATERIALIZED VIEW mydataset.mv
+						OPTIONS(
+						description="mv",
+						max_staleness=INTERVAL 90 MINUTE
+						) AS
+						SELECT 1 AS x;
+					EOF
+					}`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "is_materialized", "true"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "max_staleness", "0-0 0 1:30:0"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccViewParser_idFullyQualified(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: `
+					data "bqutils_view_parser" "test" {
+					sql = <<-EOF
+						CREATE VIEW ` + "`myproj.mydataset.v`" + ` AS SELECT 1 AS x;
+					EOF
+					}`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "table_id", "v"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "project", "myproj"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "dataset_id", "mydataset"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "id", "projects/myproj/datasets/mydataset/tables/v"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccViewParser_idUnqualified(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: `
+					data "bqutils_view_parser" "test" {
+					sql = <<-EOF
+						CREATE VIEW lonely AS SELECT 1 AS x;
+					EOF
+					}`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "table_id", "lonely"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "id", "projects/any/datasets/any/tables/lonely"),
+					resource.TestCheckNoResourceAttr("data.bqutils_view_parser.test", "project"),
+					resource.TestCheckNoResourceAttr("data.bqutils_view_parser.test", "dataset_id"),
 				),
 			},
 		},

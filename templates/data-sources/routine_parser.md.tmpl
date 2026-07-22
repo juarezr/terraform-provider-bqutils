@@ -1,0 +1,53 @@
+---
+page_title: "{{.Name}} Data Source - {{.ProviderName}}"
+subcategory: ""
+description: |-
+  {{ .Description | trimspace }}
+---
+
+# {{.Name}}
+
+This data source parses a BigQuery CREATE SQL statement from a string and supplies its parts as attributes that can be used to fill the arguments of the BigQuery Terraform `google_bigquery_routine` resource.
+
+## Caveats
+
+- The datasource can handle the `CREATE FUNCTION`, `CREATE TABLE FUNCTION`, `CREATE PROCEDURE`, or `CREATE AGGREGATE FUNCTION` SQL statements.
+- A `CREATE TEMPORARY FUNCTION` SQL statement will produce an error because they cannot be managed as persistent BigQuery objects.
+
+## Example Usage
+
+### Parsing SQL and creating a TABLE FUNCTION in BigQuery
+
+In this example, the TABLE FUNCTION is created in BigQuery using an inline SQL statement inside the Terraform code:
+
+{{ tffile "examples/data-sources/bqutils_routine_parser/data-source.tf" }}
+
+### Loading SQL from a file to create a BigQuery routine
+
+In this example, the TABLE FUNCTION is created in BigQuery using SQL loaded from the following file in the Terraform module folder:
+
+{{ codefile "sql" "examples/data-sources/bqutils_routine_parser/mydataset.scaled_sum.sql" }}
+
+The Terraform code to create the TABLE FUNCTION is:
+
+{{ tffile "examples/data-sources/bqutils_routine_parser/data-source.file.tf" }}
+
+### Creating a JavaScript FUNCTION in BigQuery
+
+{{ tffile "examples/data-sources/bqutils_routine_parser/data-source.javascript.tf" }}
+
+### Applying access permissions to routines by using BigQuery authorized routines
+
+When Terraform updates a BigQuery routine, any authorized-routine grants on other datasets are dropped and must be re-granted.
+
+To keep access on the routine, use a `google_bigquery_dataset_access` resource and configure its `lifecycle.replace_triggered_by` argument so that when the routine body, return type, or arguments are modified, Terraform also reapplies the routine grants.
+
+Example SQL file to create a routine (placed next to the Terraform code):
+
+{{ codefile "sql" "examples/data-sources/bqutils_routine_parser/mydataset.list_tables.sql" }}
+
+Terraform code that creates the routine and grants access to the dataset:
+
+{{ tffile "examples/data-sources/bqutils_routine_parser/data-source.authorized_routine.tf" }}
+
+{{ .SchemaMarkdown | trimspace }}

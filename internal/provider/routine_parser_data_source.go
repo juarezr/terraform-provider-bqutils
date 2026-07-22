@@ -22,6 +22,7 @@ type routineParserModel struct {
 	SQL                   types.String `tfsdk:"sql"`
 	TrimBody              types.Bool   `tfsdk:"trim_body"`
 	TrimComments          types.Bool   `tfsdk:"trim_comments"`
+	TrimIndentation       types.Bool   `tfsdk:"trim_indentation"`
 	ID                    types.String `tfsdk:"id"`
 	Project               types.String `tfsdk:"project"`
 	DatasetID             types.String `tfsdk:"dataset_id"`
@@ -46,7 +47,7 @@ func (d *RoutineParserDataSource) Metadata(_ context.Context, req datasource.Met
 
 func (d *RoutineParserDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Parses a BigQuery CREATE FUNCTION / TABLE FUNCTION / PROCEDURE / AGGREGATE FUNCTION statement and exposes attributes for google_bigquery_routine.",
+		MarkdownDescription: "Parses a BigQuery CREATE SQL statement from a string and supplies its parts as attributes for google_bigquery_routine. Main use case: create and update BigQuery routines from SQL files with Terraform.",
 		Attributes: map[string]schema.Attribute{
 			"sql": schema.StringAttribute{
 				MarkdownDescription: "Full CREATE statement SQL text.",
@@ -60,80 +61,108 @@ func (d *RoutineParserDataSource) Schema(_ context.Context, _ datasource.SchemaR
 				MarkdownDescription: "Remove SQL comments from definition_body. Defaults to false.",
 				Optional:            true,
 			},
+			"trim_indentation": schema.BoolAttribute{
+				MarkdownDescription: "Remove the common first-level leading whitespace from each line of definition_body (deeper indentation is kept). Useful for SQL embedded in indented Terraform heredocs. Defaults to false.",
+				Optional:            true,
+			},
 			"id": schema.StringAttribute{
-				Computed: true,
+				MarkdownDescription: "Synthetic id matching google_bigquery_routine: projects/<project>/datasets/<dataset_id>/routines/<routine_id>. Missing project or dataset segments use the placeholder \"any\" (not exposed on project/dataset_id).",
+				Computed:            true,
 			},
 			"project": schema.StringAttribute{
-				MarkdownDescription: "Project from a three-part routine name, if present.",
+				MarkdownDescription: "Project parsed from a three-part name, if present.",
 				Computed:            true,
 			},
 			"dataset_id": schema.StringAttribute{
-				MarkdownDescription: "Dataset from a qualified routine name, if present.",
+				MarkdownDescription: "Routine dataset parsed from the SQL statement, if present.",
 				Computed:            true,
 			},
 			"routine_id": schema.StringAttribute{
-				Computed: true,
+				MarkdownDescription: "Name of the routine parsed from the SQL statement.",
+				Computed:            true,
 			},
 			"routine_type": schema.StringAttribute{
-				MarkdownDescription: "SCALAR_FUNCTION, TABLE_FUNCTION, PROCEDURE, or AGGREGATE_FUNCTION.",
+				MarkdownDescription: "SCALAR_FUNCTION, TABLE_VALUED_FUNCTION, PROCEDURE, or AGGREGATE_FUNCTION.",
 				Computed:            true,
 			},
 			"definition_body": schema.StringAttribute{
-				Computed: true,
+				MarkdownDescription: "The body of the routine. For functions, this is the expression in the AS clause. If language=SQL, it is the substring inside (but excluding) the parentheses.",
+				Computed:            true,
 			},
 			"language": schema.StringAttribute{
-				Computed: true,
+				MarkdownDescription: "The language of the routine. Possible values: SQL, JAVASCRIPT, PYTHON, JAVA, SCALA.",
+				Computed:            true,
 			},
 			"return_type": schema.StringAttribute{
-				MarkdownDescription: "StandardSqlDataType JSON string.",
+				MarkdownDescription: "StandardSqlDataType as JSON schema for the function return type when present.",
 				Computed:            true,
 			},
 			"return_table_type": schema.StringAttribute{
-				MarkdownDescription: "JSON for RETURNS TABLE<...> when present.",
+				MarkdownDescription: "JSON for RETURNS TABLE<...> when present (table-valued functions).",
 				Computed:            true,
 			},
 			"description": schema.StringAttribute{
-				Computed: true,
+				MarkdownDescription: "Description parsed from the SQL OPTIONS clause, if present.",
+				Computed:            true,
 			},
 			"imported_libraries": schema.ListAttribute{
-				ElementType: types.StringType,
-				Computed:    true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "If language is JAVASCRIPT, paths of imported JavaScript libraries.",
+				Computed:            true,
 			},
 			"determinism_level": schema.StringAttribute{
-				Computed: true,
+				MarkdownDescription: "Determinism level of a JavaScript UDF if defined. Possible values: DETERMINISM_LEVEL_UNSPECIFIED, DETERMINISTIC, NOT_DETERMINISTIC.",
+				Computed:            true,
 			},
 			"data_governance_type": schema.StringAttribute{
-				Computed: true,
+				MarkdownDescription: "If set to DATA_MASKING, the function is validated and made available as a masking function.",
+				Computed:            true,
 			},
 			"arguments": schema.ListNestedAttribute{
-				Computed: true,
+				MarkdownDescription: "Routine arguments parsed from the CREATE statement.",
+				Computed:            true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"name": schema.StringAttribute{
-							Computed: true,
+							MarkdownDescription: "The name of this argument.",
+							Computed:            true,
 						},
 						"data_type": schema.StringAttribute{
-							MarkdownDescription: "StandardSqlDataType JSON string.",
+							MarkdownDescription: "StandardSqlDataType JSON schema for the data type.",
 							Computed:            true,
 						},
 						"argument_kind": schema.StringAttribute{
-							Computed: true,
+							MarkdownDescription: "Default FIXED_TYPE. Possible values: FIXED_TYPE, ANY_TYPE.",
+							Computed:            true,
 						},
 						"mode": schema.StringAttribute{
-							Computed: true,
+							MarkdownDescription: "Argument mode for procedures when present (IN, OUT, INOUT).",
+							Computed:            true,
+						},
+						"is_aggregate": schema.BoolAttribute{
+							MarkdownDescription: "For CREATE AGGREGATE FUNCTION parameters: false when the SQL includes NOT AGGREGATE, true for aggregate parameters. Null for non-UDAF routines. google_bigquery_routine does not expose this field yet.",
+							Computed:            true,
 						},
 					},
 				},
 			},
 			"remote_function_options": schema.SingleNestedAttribute{
-				Computed: true,
+				MarkdownDescription: "Remote function options when present.",
+				Computed:            true,
 				Attributes: map[string]schema.Attribute{
-					"connection": schema.StringAttribute{Computed: true},
-					"endpoint":   schema.StringAttribute{Computed: true},
+					"connection": schema.StringAttribute{
+						MarkdownDescription: "Connection resource name for the remote function.",
+						Computed:            true,
+					},
+					"endpoint": schema.StringAttribute{
+						MarkdownDescription: "Remote function endpoint URL.",
+						Computed:            true,
+					},
 				},
 			},
 			"spark_options": schema.SingleNestedAttribute{
-				Computed: true,
+				MarkdownDescription: "If language is PYTHON, JAVA, or SCALA, options for a Spark stored procedure.",
+				Computed:            true,
 				Attributes: map[string]schema.Attribute{
 					"raw": schema.StringAttribute{
 						MarkdownDescription: "Raw spark options JSON when present.",
@@ -160,19 +189,25 @@ func (d *RoutineParserDataSource) Read(ctx context.Context, req datasource.ReadR
 	if !data.TrimComments.IsNull() && !data.TrimComments.IsUnknown() {
 		trimComments = data.TrimComments.ValueBool()
 	}
+	trimIndentation := false
+	if !data.TrimIndentation.IsNull() && !data.TrimIndentation.IsUnknown() {
+		trimIndentation = data.TrimIndentation.ValueBool()
+	}
 
 	result, err := sqlparse.ParseRoutine(data.SQL.ValueString(), sqlparse.Options{
-		TrimBody:     trimBody,
-		TrimComments: trimComments,
+		TrimBody:        trimBody,
+		TrimComments:    trimComments,
+		TrimIndentation: trimIndentation,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("SQL parse error", err.Error())
 		return
 	}
 
-	data.ID = types.StringValue(result.ObjectID)
+	data.ID = types.StringValue(resourceID("routines", result.Project, result.DatasetID, result.ObjectID))
 	data.TrimBody = types.BoolValue(trimBody)
 	data.TrimComments = types.BoolValue(trimComments)
+	data.TrimIndentation = types.BoolValue(trimIndentation)
 	data.Project = stringOrNull(result.Project)
 	data.DatasetID = stringOrNull(result.DatasetID)
 	data.RoutineID = types.StringValue(result.ObjectID)
@@ -195,6 +230,7 @@ func (d *RoutineParserDataSource) Read(ctx context.Context, req datasource.ReadR
 			"data_type":     types.StringType,
 			"argument_kind": types.StringType,
 			"mode":          types.StringType,
+			"is_aggregate":  types.BoolType,
 		},
 	}
 	argVals := make([]attr.Value, 0, len(result.Arguments))
@@ -204,6 +240,7 @@ func (d *RoutineParserDataSource) Read(ctx context.Context, req datasource.ReadR
 			"data_type":     stringOrNull(a.DataTypeJSON),
 			"argument_kind": stringOrNull(a.ArgumentKind),
 			"mode":          stringOrNull(a.Mode),
+			"is_aggregate":  boolPtrOrNull(a.IsAggregate),
 		})
 		resp.Diagnostics.Append(diags...)
 		argVals = append(argVals, obj)
@@ -243,4 +280,11 @@ func stringOrNull(s string) types.String {
 		return types.StringNull()
 	}
 	return types.StringValue(s)
+}
+
+func boolPtrOrNull(b *bool) types.Bool {
+	if b == nil {
+		return types.BoolNull()
+	}
+	return types.BoolValue(*b)
 }

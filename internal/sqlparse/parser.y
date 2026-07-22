@@ -4,6 +4,7 @@ package sqlparse
 // Parser grammar for BigQuery CREATE routine/view headers.
 // The production rules document the supported surface; the runtime entrypoint
 // is Parse() in parse.go which uses the same lexical conventions.
+// Argument lists may include a trailing NOT AGGREGATE suffix on UDAF parameters.
 //
 //go:generate goyacc -o y.go -p yy parser.y
 

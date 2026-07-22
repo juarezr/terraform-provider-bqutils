@@ -37,6 +37,11 @@ fmt:
 tools:
 	go install github.com/vitessio/goyacc@latest
 	go install github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@latest
+	go install golang.org/x/vuln/cmd/govulncheck@latest
+
+.PHONY: check
+check:
+	govulncheck ./...
 
 .PHONY: docs
 docs:
@@ -48,3 +53,13 @@ clean:
 	rm -f y.go
 	rm -f *.log
 	rm -f *.tmp
+
+.PHONY: outdated
+outdated:
+	go list -m -u all
+
+.PHONY: upgrade
+update:
+	go get -u all
+	go mod tidy
+	go mod verify

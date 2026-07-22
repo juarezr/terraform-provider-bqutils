@@ -2,44 +2,68 @@
 page_title: "bqutils_view_parser Data Source - bqutils"
 subcategory: ""
 description: |-
-  Parses BigQuery CREATE VIEW SQL for google_bigquery_table.
+  Parses a BigQuery CREATE VIEW or CREATE MATERIALIZED VIEW statement and exposes attributes for google_bigquery_table.
 ---
 
 # bqutils_view_parser (Data Source)
 
 Parses a BigQuery `CREATE VIEW` or `CREATE MATERIALIZED VIEW` statement.
 
+## Caveats
+
+- The datasource can handle the `CREATE VIEW` and the `CREATE MATERIALIZED VIEW` SQL statements.
+- Unmappable `OPTIONS` (for example `retain_partitions`) from the SQL statement are ignored.
+
 ## Example Usage
 
-### Loading SQL from a file
+### Loading SQL from a file to create a BigQuery view
+
+In this example, the VIEW is created in BigQuery using SQL loaded from the following file in the Terraform module folder:
+
+```sql
+CREATE OR REPLACE VIEW `mydataset.my_simple_view`
+(
+  table_schema OPTIONS(description="The schema of the table"),
+  table_name OPTIONS(description="The name of the table")
+) OPTIONS(
+  description="Simple view created by Terraform"
+) AS
+  SELECT table_schema, table_name
+  FROM mydataset.INFORMATION_SCHEMA.TABLES;
+```
+
+The Terraform code to create the VIEW is:
 
 ```terraform
+# Load the VIEW SQL from a file in the same folder as the Terraform code.
+
 data "bqutils_view_parser" "example" {
-  sql = file("${path.module}/view.sql")
+  sql = file("${path.module}/mydataset.my_simple_view.sql")
 }
 ```
 
 ### Parsing SQL and creating a VIEW in BigQuery
 
 ```terraform
-data "bqutils_view_parser" "simple_view" {
+# Parse a VIEW and create google_bigquery_table.
 
+data "bqutils_view_parser" "simple_view" {
   sql = <<EOF
-    CREATE OR REPLACE VIEW IF NOT EXISTS `mydataset.my_simple_view`
+    CREATE OR REPLACE VIEW `mydataset`.my_simple_view
     (
-      TABLE_SCHEMA OPTIONS(description="The schema of the table"),
-      TABLE_NAME         OPTIONS(description="The name of the table"),
-      TABLE_TYPE         OPTIONS(description="The type of the table"),
-      TABLE_CREATION_TIME OPTIONS(description="The creation time of the table"),
-      TABLE_UPDATE_TIME  OPTIONS(description="The update time of the table")
+      table_schema       OPTIONS(description="The schema of the table"),
+      table_name         OPTIONS(description="The name of the table"),
+      creation_time      OPTIONS(description="The creation time of the table"),
+      table_type         OPTIONS(description="The type of the table"),
+      managed_table_type OPTIONS(description="The managed type of the table")
     ) OPTIONS(
       description="Simple view created by Terraform"
     ) AS
-      SELECT TABLE_SCHEMA
-        , TABLE_NAME
-        , TABLE_TYPE
-        , TABLE_CREATION_TIME
-        , TABLE_UPDATE_TIME
+      SELECT table_schema
+        , table_name
+        , creation_time
+        , table_type
+        , managed_table_type
       FROM mydataset.INFORMATION_SCHEMA.TABLES;
   EOF
 }
@@ -49,7 +73,6 @@ data "google_bigquery_dataset" "mydataset" {
 }
 
 resource "google_bigquery_table" "simple_view" {
-
   dataset_id = data.google_bigquery_dataset.mydataset.dataset_id
 
   table_id      = data.bqutils_view_parser.simple_view.table_id
@@ -60,47 +83,54 @@ resource "google_bigquery_table" "simple_view" {
   deletion_protection = false
 
   view {
-    # The SQL query that defines the materialized view: After AS elment in SQL Syntax
-    query = data.bqutils_view_parser.simple_view.query
+    # SQL query that defines the view (after AS in the SQL syntax)
+    query          = data.bqutils_view_parser.simple_view.query
+    use_legacy_sql = false
   }
 }
 ```
 
-### Parsing SQL and creating a MATERIALIZED VIEW in BigQuery
+### Creating a MATERIALIZED VIEW in BigQuery
 
-```terraform
-data "bqutils_view_parser" "materialized_view" {
+In this example, the MATERIALIZED VIEW is created in BigQuery using SQL loaded from the following file in the Terraform module folder:
 
-  sql = <<EOF
-    CREATE OR REPLACE MATERIALIZED VIEW IF NOT EXISTS `mydataset.my_materialized_view`
-    PARTITION BY DATE(TABLE_CREATION_TIME)
-    CLUSTER BY TABLE_SCHEMA, TABLE_NAME
+```sql
+CREATE OR REPLACE MATERIALIZED VIEW `mydataset`.my_materialized_view
+    PARTITION BY DATE(creation_time)
+    CLUSTER BY customer_name, order_id
     OPTIONS(
       description="Materialized view created by Terraform",
       enable_refresh=TRUE,
       allow_non_incremental_definition=FALSE,
       refresh_interval_minutes=60,
-      max_staleness=INTERVAL "4:0:0" HOUR TO SECOND,
-      retain_partitions=true,
+      max_staleness=INTERVAL 90 MINUTE,
       kms_key_name="projects/1234567890/locations/global/keyRings/my-key-ring/cryptoKeys/my-key",
       labels=[("org_unit", "development")]
     ) AS
-      SELECT TABLE_SCHEMA
-        , TABLE_NAME
-        , TABLE_TYPE
-        , TABLE_COMMENT
-        , TABLE_CREATION_TIME
-        , TABLE_UPDATE_TIME
-      FROM mydataset.INFORMATION_SCHEMA.TABLES;
-  EOF
+      SELECT order_id
+        , customer_name
+        , delivery_type
+        , creation_time
+      FROM mydataset.orders AS o;
+```
+
+The Terraform code to create the VIEW is:
+
+```terraform
+# Load the MATERIALIZED VIEW SQL from a file in the same folder as the Terraform code.
+
+data "bqutils_view_parser" "example" {
+  sql = file("${path.module}/mydataset.my_materialized_view.sql")
 }
 
+# Get the BigQuery dataset to create the MATERIALIZED VIEW in.
 data "google_bigquery_dataset" "mydataset" {
   dataset_id = "mydataset"
 }
 
-resource "google_bigquery_table" "materialized_view" {
+# Create the MATERIALIZED VIEW in BigQuery using the attributes parsed from the SQL file.
 
+resource "google_bigquery_table" "materialized_view" {
   dataset_id = data.google_bigquery_dataset.mydataset.dataset_id
 
   table_id      = data.bqutils_view_parser.materialized_view.table_id
@@ -131,14 +161,13 @@ resource "google_bigquery_table" "materialized_view" {
     kms_key_name = data.bqutils_view_parser.materialized_view.kms_key_name
   }
 
-# Ensure the view depends explicitly on the dataset existence
-
   depends_on = [
     data.google_bigquery_dataset.mydataset
   ]
 }
 ```
 
+<!-- schema generated by tfplugindocs -->
 ## Schema
 
 ### Required
@@ -147,26 +176,27 @@ resource "google_bigquery_table" "materialized_view" {
 
 ### Optional
 
-- `trim_body` (Boolean) Trim leading/trailing whitespace and empty lines from `query`. Defaults to `true`.
-- `trim_comments` (Boolean) Remove SQL comments from `query`. Defaults to `false`.
+- `trim_body` (Boolean) Trim leading/trailing whitespace and empty lines from query. Defaults to true.
+- `trim_comments` (Boolean) Remove SQL comments from query. Defaults to false.
+- `trim_indentation` (Boolean) Remove the common first-level leading whitespace from each line of query (deeper indentation is kept). Useful for SQL embedded in indented Terraform heredocs. Defaults to false.
 
 ### Read-Only
 
-- `id` (String)
-- `project` (String)
-- `dataset_id` (String)
-- `table_id` (String)
-- `query` (String)
-- `description` (String)
-- `friendly_name` (String)
-- `labels` (Map of String)
-- `is_materialized` (Boolean)
+- `allow_non_incremental_definition` (Boolean) Materialized view allow_non_incremental_definition option when present.
+- `clustering` (List of String) Clustering columns from CLUSTER BY when present.
+- `dataset_id` (String) Dataset parsed from the SQL statement, if present.
+- `description` (String) Description from OPTIONS, if present.
+- `enable_refresh` (Boolean) Materialized view enable_refresh option when present.
+- `friendly_name` (String) Friendly name from OPTIONS, if present.
+- `id` (String) Synthetic id matching google_bigquery_table: projects/<project>/datasets/<dataset_id>/tables/<table_id>. Missing project or dataset segments use the placeholder "any" (not exposed on project/dataset_id).
+- `is_materialized` (Boolean) True when the statement is CREATE MATERIALIZED VIEW.
+- `kms_key_name` (String) KMS key name from OPTIONS, if present.
+- `labels` (Map of String) Labels from OPTIONS, if present.
+- `max_staleness` (String) IntervalValue encoding (Y-M D H:M:S) for google_bigquery_table.max_staleness. SQL INTERVAL options such as INTERVAL 90 MINUTE or INTERVAL "4:0:0" HOUR TO SECOND are converted automatically.
+- `partitioning_field` (String) Partitioning field derived from PARTITION BY when present.
+- `partitioning_type` (String) Time partitioning type derived from PARTITION BY when present.
+- `project` (String) Project parsed from a three-part view name, if present.
+- `query` (String) View query body after AS.
+- `refresh_interval_ms` (Number) Converted from refresh_interval_minutes when present.
 - `schema` (String) JSON schema from the view column list when present (types default to STRING when not specified in SQL).
-- `enable_refresh` (Boolean)
-- `allow_non_incremental_definition` (Boolean)
-- `refresh_interval_ms` (Number) Converted from `refresh_interval_minutes` when present.
-- `max_staleness` (String)
-- `kms_key_name` (String)
-- `partitioning_type` (String)
-- `partitioning_field` (String)
-- `clustering` (List of String)
+- `table_id` (String) Table/view id parsed from the SQL statement.
