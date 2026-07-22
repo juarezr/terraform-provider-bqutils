@@ -7,40 +7,72 @@ description: |-
 
 # {{.RenderedProviderName}} Provider
 
-The **bqutils** provider parses BigQuery `CREATE` SQL statements to ease creating and updating BigQuery routines and views with Terraform.
+The **bqutils** provider automates the creation and update of BigQuery functions/procedures/views using `CREATE` SQL statements stored in files, aiming to reduce the effort required to manage the source code of these objects.
 
 ## Overview
 
-The main use case is creating and updating BigQuery routines and views with Terraform by loading them directly from SQL files.
+### Objective
 
-The data sources in this provider were tailored for use with the `google_bigquery_routine` and `google_bigquery_table` resources. They expose attributes that can fill the arguments of these resources from values obtained from the parsed SQL CREATE statements.
+The main objective of this provider is to reduce the amount of work required to create, test, depoly and update the source code of BigQuery routines and views.
 
-### Benefits
+It acomplishes this goal by allowing to use the same SQL script to be used either in the BigQuery Console and in Terraform. One can develop and test the SQL script in the BigQuery Console and then store and versioning them in a Git repository to deploy and update using Terraform with no modifications to the source code.
 
-Productivity gains:
+### Problem Statement
 
-- Using the data sources in this provider removes the need to manually slice the routine source code into parts like arguments, body, and return type for feeding the `google_bigquery_routine` resource.
-- It also lets you use the same SQL source file to provision the routines/views with Terraform or to create them manually in the BigQuery Console.
-- You can also combine the data sources in this provider with other Terraform resources to accomplish further automation, such as:
-  - Granting access to the routines/views to other datasets or projects using the `google_bigquery_dataset_access` resource.
-  - Using the `google_bigquery_routine_iam_member` resource to manage IAM permissions for the routines/views.
+If you tried to use the [google_bigquery_routine](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_routine) or [google_bigquery_table](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_table) resources in the [Google Provider](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_routine) to provision BigQuery routines and views, you've already noticed that these resources require you to manually slice the CREATE SQL statement into smaller parts like arguments, body, return type, partitioning/clustering and several options. This is an tedious and error prone task that lead to bugs and inefficiencies in the development process.
 
-Code maintainability gains:
+These tasks can be automated with the datasources in this provider, so you can focus on the SQL/javascript/python development and testing instead of wasting time trying to fit your code into the shape of those resources.
 
-- The data sources in this provider help you apply only the routines that changed in each environment, without tracking them manually. Terraform updates only routines that have changed.
-- You can also use git for versioning the Terraform and SQL files, so you can track the impact of changes and bugs introduced in your routines/views.
+### How it works
 
-Code management gains:
+The datasources in this provider were tailored to be used coupled with the `google_bigquery_routine` and `google_bigquery_table` resources. The datasources parse SQL CREATE statements and expose the values in the code in their attributes so one can use them to filld the arguments of former resources to create the routines and views in BigQuery.
 
-- The data sources in this provider allow you to keep your routines and views always up to date in all BigQuery environments you have.
-- They make it easier to manage rollout of changes to several routines or views and reduce the risk of accidental breakage from forgotten changes.
-- They make it possible to roll back changes to a previous version of the routines or views if needed, when the Terraform and the SQL code are versioned in Git.
+The process of creating and updating routines and views with Terraform is straightforward:
 
-### Restrictions
+1. Write the SQL for the routine or view and assure it creates the object in BigQuery.
+2. Store the SQL script in a file next to the Terraform code under the same module/folder.
+3. Use the [file](https://developer.hashicorp.com/terraform/language/functions/file) function to make Terraform read the SQL script.
+4. Assign in the Terraform code the file content to the `sql` argument of the `bqutils_routine_parser` or `bqutils_view_parser` datasources from this provider so they can parse the CREATE statement and get the values into their attributes.
+5. Foward the datasource attributes to corresponding arguments with the same name in the `google_bigquery_routine` and `google_bigquery_table` resources.
+6. Terraform will then apply the changes to the routines/views in BigQuery as part of the plan/apply cycle.
+
+## Benefits
+
+Using the data sources in this provider you can get the following benefits:
+
+### Productivity gains
+
+- Avoid the need to manually slice the routine source code into parts like arguments, body, options and settings for feeding in the `google_bigquery_routine` and  `google_bigquery_table` resources.
+- Use the same SQL source file to provision the routines/views with Terraform or to create them manually in the BigQuery Console.
+- Combine with other Terraform resources to accomplish even more automation, such as:
+  - Granting access to the routines/views to other datasets using the [google_bigquery_dataset_access](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_dataset_access) resource.
+  - Manage BigQuery routines/views IAM permissions with the [google_bigquery_routine_iam_member](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_routine_iam_member), and [google_bigquery_table_iam_member](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_table_iam_member) resources.
+
+### Code maintainability gains
+
+- Avoid the need for manually tracking what routines and views were modified and need deployment. 
+  - Terraform will handle that for you if you use the datasources in this provider coupled with the BigQuery resources in the Google Provider.
+  - At deployment time, Terraform will compare the source code of your SQL script with the version last applied to the BigQuery and will recreate only the routines/views that have changed.
+- Allow the use of Git for versioning the SQL script files and the Terraform code, so you can:
+  - Inspect the impact of changes before applying them.
+  - Investigate and detect bugs introduced in your routines/views as they are being modified.
+  - Integrate with your CI/CD pipeline to automate the deployment of changes to your routines/views.
+  - Make easier for developers to share and review changes to your routines/views by using Git diffs and merge requests.
+
+### Code management gains
+
+- Allows to keep your routines and views always up to date in all BigQuery environments you have.
+- Make it easier to manage rollout of changes to several routines or views at once because Terraform will apply all the changes at once in a single operation.
+- Reduce the risk of accidental breakage from forgotten changes that could happen because otherwise you have to manually collect and execute the modified SQL scripts.
+- Make it possible to roll back changes to a previous version of the routines or views if needed.
+  - Rolling back changes to a previous version of the routines/views becomes a simple matter of reverting to a previous commit, tag or branch and applying the changes with Terraform.
+
+### Caveats
 
 - Terraform will "own" your routine and view source code. Any changes applied outside the plan/apply cycle will be overwritten.
+  - However you may also play with the SQL script outside the Terraform code to test and debug your routines/views as the code will be the same.
 
-### Security
+## Security
 
 The provider:
 
