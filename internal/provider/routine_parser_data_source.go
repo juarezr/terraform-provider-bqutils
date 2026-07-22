@@ -61,7 +61,8 @@ func (d *RoutineParserDataSource) Schema(_ context.Context, _ datasource.SchemaR
 				Optional:            true,
 			},
 			"id": schema.StringAttribute{
-				Computed: true,
+				MarkdownDescription: "Synthetic id matching google_bigquery_routine: projects/<project>/datasets/<dataset_id>/routines/<routine_id>. Missing project or dataset segments use the placeholder \"any\" (not exposed on project/dataset_id).",
+				Computed:            true,
 			},
 			"project": schema.StringAttribute{
 				MarkdownDescription: "Project from a three-part routine name, if present.",
@@ -174,7 +175,7 @@ func (d *RoutineParserDataSource) Read(ctx context.Context, req datasource.ReadR
 		return
 	}
 
-	data.ID = types.StringValue(result.ObjectID)
+	data.ID = types.StringValue(resourceID("routines", result.Project, result.DatasetID, result.ObjectID))
 	data.TrimBody = types.BoolValue(trimBody)
 	data.TrimComments = types.BoolValue(trimComments)
 	data.Project = stringOrNull(result.Project)

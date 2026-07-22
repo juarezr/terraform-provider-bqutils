@@ -351,7 +351,7 @@ SELECT *
 
 ### Read-Only
 
-- `id` (String)
+- `id` (String) Synthetic id matching `google_bigquery_routine`: `projects/<project>/datasets/<dataset_id>/routines/<routine_id>`. Missing project or dataset segments it uses the placeholder `any` (not exposed on `project` / `dataset_id`).
 - `project` (String) Project parsed from a three-part name, if present.
 - `dataset_id` (String) Routine dataset parsed from the SQL statement, if present.
 - `routine_id` (String) - Name of the routine parsed from the SQL statement.

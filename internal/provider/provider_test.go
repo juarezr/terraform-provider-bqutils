@@ -39,6 +39,8 @@ data "bqutils_routine_parser" "test" {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_id", "list_partitions"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_id", "mydataset"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "id", "projects/any/datasets/mydataset/routines/list_partitions"),
+					resource.TestCheckNoResourceAttr("data.bqutils_routine_parser.test", "project"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_type", "TABLE_VALUED_FUNCTION"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "language", "SQL"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "description", "desc"),
@@ -68,9 +70,35 @@ data "bqutils_routine_parser" "test" {
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_id", "parse_json_to_array"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "id", "projects/any/datasets/any/routines/parse_json_to_array"),
+					resource.TestCheckNoResourceAttr("data.bqutils_routine_parser.test", "project"),
+					resource.TestCheckNoResourceAttr("data.bqutils_routine_parser.test", "dataset_id"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_type", "SCALAR_FUNCTION"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "language", "JAVASCRIPT"),
 					resource.TestCheckResourceAttrSet("data.bqutils_routine_parser.test", "return_type"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccRoutineParser_idFullyQualified(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: `
+data "bqutils_routine_parser" "test" {
+  sql = <<-EOF
+    CREATE FUNCTION ` + "`myproj.mydataset.fn`" + `(x INT64) RETURNS INT64 AS (x);
+  EOF
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_id", "fn"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "project", "myproj"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_id", "mydataset"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "id", "projects/myproj/datasets/mydataset/routines/fn"),
 				),
 			},
 		},
@@ -147,6 +175,8 @@ data "bqutils_view_parser" "test" {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "table_id", "my_simple_view"),
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "dataset_id", "mydataset"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "id", "projects/any/datasets/mydataset/tables/my_simple_view"),
+					resource.TestCheckNoResourceAttr("data.bqutils_view_parser.test", "project"),
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "is_materialized", "false"),
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "description", "Simple view"),
 					resource.TestCheckResourceAttrSet("data.bqutils_view_parser.test", "schema"),
@@ -213,6 +243,52 @@ data "bqutils_view_parser" "test" {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "is_materialized", "true"),
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "max_staleness", "0-0 0 1:30:0"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccViewParser_idFullyQualified(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: `
+data "bqutils_view_parser" "test" {
+  sql = <<-EOF
+    CREATE VIEW ` + "`myproj.mydataset.v`" + ` AS SELECT 1 AS x;
+  EOF
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "table_id", "v"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "project", "myproj"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "dataset_id", "mydataset"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "id", "projects/myproj/datasets/mydataset/tables/v"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccViewParser_idUnqualified(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: `
+data "bqutils_view_parser" "test" {
+  sql = <<-EOF
+    CREATE VIEW lonely AS SELECT 1 AS x;
+  EOF
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "table_id", "lonely"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "id", "projects/any/datasets/any/tables/lonely"),
+					resource.TestCheckNoResourceAttr("data.bqutils_view_parser.test", "project"),
+					resource.TestCheckNoResourceAttr("data.bqutils_view_parser.test", "dataset_id"),
 				),
 			},
 		},

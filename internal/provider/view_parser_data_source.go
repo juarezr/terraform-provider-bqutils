@@ -61,7 +61,10 @@ func (d *ViewParserDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 				MarkdownDescription: "Remove SQL comments from query. Defaults to false.",
 				Optional:            true,
 			},
-			"id":            schema.StringAttribute{Computed: true},
+			"id": schema.StringAttribute{
+				MarkdownDescription: "Synthetic id matching google_bigquery_table: projects/<project>/datasets/<dataset_id>/tables/<table_id>. Missing project or dataset segments use the placeholder \"any\" (not exposed on project/dataset_id).",
+				Computed:            true,
+			},
 			"project":       schema.StringAttribute{Computed: true},
 			"dataset_id":    schema.StringAttribute{Computed: true},
 			"table_id":      schema.StringAttribute{Computed: true},
@@ -87,9 +90,9 @@ func (d *ViewParserDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 				MarkdownDescription: "IntervalValue encoding (Y-M D H:M:S) for google_bigquery_table. SQL INTERVAL options are converted automatically.",
 				Computed:            true,
 			},
-			"kms_key_name":                     schema.StringAttribute{Computed: true},
-			"partitioning_type":                schema.StringAttribute{Computed: true},
-			"partitioning_field":               schema.StringAttribute{Computed: true},
+			"kms_key_name":       schema.StringAttribute{Computed: true},
+			"partitioning_type":  schema.StringAttribute{Computed: true},
+			"partitioning_field": schema.StringAttribute{Computed: true},
 			"clustering": schema.ListAttribute{
 				ElementType: types.StringType,
 				Computed:    true,
@@ -123,7 +126,7 @@ func (d *ViewParserDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	data.ID = types.StringValue(result.ObjectID)
+	data.ID = types.StringValue(resourceID("tables", result.Project, result.DatasetID, result.ObjectID))
 	data.TrimBody = types.BoolValue(trimBody)
 	data.TrimComments = types.BoolValue(trimComments)
 	data.Project = stringOrNull(result.Project)

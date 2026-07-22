@@ -151,7 +151,7 @@ resource "google_bigquery_table" "materialized_view" {
 
 ### Read-Only
 
-- `id` (String)
+- `id` (String) Synthetic id matching `google_bigquery_table`: `projects/<project>/datasets/<dataset_id>/tables/<table_id>`. Missing project or dataset segments it uses the placeholder `any` (not exposed on `project` / `dataset_id`).
 - `project` (String)
 - `dataset_id` (String)
 - `table_id` (String)
