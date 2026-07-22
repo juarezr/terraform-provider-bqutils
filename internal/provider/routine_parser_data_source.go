@@ -46,7 +46,7 @@ func (d *RoutineParserDataSource) Metadata(_ context.Context, req datasource.Met
 
 func (d *RoutineParserDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Parses a BigQuery CREATE FUNCTION / TABLE FUNCTION / PROCEDURE / AGGREGATE FUNCTION statement and exposes attributes for google_bigquery_routine.",
+		MarkdownDescription: "Parses a BigQuery CREATE SQL statement from a string and supplies its parts as attributes for google_bigquery_routine. Main use case: create and update BigQuery routines from SQL files with Terraform.",
 		Attributes: map[string]schema.Attribute{
 			"sql": schema.StringAttribute{
 				MarkdownDescription: "Full CREATE statement SQL text.",
@@ -65,80 +65,99 @@ func (d *RoutineParserDataSource) Schema(_ context.Context, _ datasource.SchemaR
 				Computed:            true,
 			},
 			"project": schema.StringAttribute{
-				MarkdownDescription: "Project from a three-part routine name, if present.",
+				MarkdownDescription: "Project parsed from a three-part name, if present.",
 				Computed:            true,
 			},
 			"dataset_id": schema.StringAttribute{
-				MarkdownDescription: "Dataset from a qualified routine name, if present.",
+				MarkdownDescription: "Routine dataset parsed from the SQL statement, if present.",
 				Computed:            true,
 			},
 			"routine_id": schema.StringAttribute{
-				Computed: true,
+				MarkdownDescription: "Name of the routine parsed from the SQL statement.",
+				Computed:            true,
 			},
 			"routine_type": schema.StringAttribute{
-				MarkdownDescription: "SCALAR_FUNCTION, TABLE_VALUED_FUNCTION, or PROCEDURE.",
+				MarkdownDescription: "SCALAR_FUNCTION, TABLE_VALUED_FUNCTION, PROCEDURE, or AGGREGATE_FUNCTION.",
 				Computed:            true,
 			},
 			"definition_body": schema.StringAttribute{
-				Computed: true,
+				MarkdownDescription: "The body of the routine. For functions, this is the expression in the AS clause. If language=SQL, it is the substring inside (but excluding) the parentheses.",
+				Computed:            true,
 			},
 			"language": schema.StringAttribute{
-				Computed: true,
+				MarkdownDescription: "The language of the routine. Possible values: SQL, JAVASCRIPT, PYTHON, JAVA, SCALA.",
+				Computed:            true,
 			},
 			"return_type": schema.StringAttribute{
-				MarkdownDescription: "StandardSqlDataType JSON string.",
+				MarkdownDescription: "StandardSqlDataType as JSON schema for the function return type when present.",
 				Computed:            true,
 			},
 			"return_table_type": schema.StringAttribute{
-				MarkdownDescription: "JSON for RETURNS TABLE<...> when present.",
+				MarkdownDescription: "JSON for RETURNS TABLE<...> when present (table-valued functions).",
 				Computed:            true,
 			},
 			"description": schema.StringAttribute{
-				Computed: true,
+				MarkdownDescription: "Description parsed from the SQL OPTIONS clause, if present.",
+				Computed:            true,
 			},
 			"imported_libraries": schema.ListAttribute{
-				ElementType: types.StringType,
-				Computed:    true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "If language is JAVASCRIPT, paths of imported JavaScript libraries.",
+				Computed:            true,
 			},
 			"determinism_level": schema.StringAttribute{
-				Computed: true,
+				MarkdownDescription: "Determinism level of a JavaScript UDF if defined. Possible values: DETERMINISM_LEVEL_UNSPECIFIED, DETERMINISTIC, NOT_DETERMINISTIC.",
+				Computed:            true,
 			},
 			"data_governance_type": schema.StringAttribute{
-				Computed: true,
+				MarkdownDescription: "If set to DATA_MASKING, the function is validated and made available as a masking function.",
+				Computed:            true,
 			},
 			"arguments": schema.ListNestedAttribute{
-				Computed: true,
+				MarkdownDescription: "Routine arguments parsed from the CREATE statement.",
+				Computed:            true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"name": schema.StringAttribute{
-							Computed: true,
+							MarkdownDescription: "The name of this argument.",
+							Computed:            true,
 						},
 						"data_type": schema.StringAttribute{
-							MarkdownDescription: "StandardSqlDataType JSON string.",
+							MarkdownDescription: "StandardSqlDataType JSON schema for the data type.",
 							Computed:            true,
 						},
 						"argument_kind": schema.StringAttribute{
-							Computed: true,
+							MarkdownDescription: "Default FIXED_TYPE. Possible values: FIXED_TYPE, ANY_TYPE.",
+							Computed:            true,
 						},
 						"mode": schema.StringAttribute{
-							Computed: true,
+							MarkdownDescription: "Argument mode for procedures when present (IN, OUT, INOUT).",
+							Computed:            true,
 						},
 						"is_aggregate": schema.BoolAttribute{
-							MarkdownDescription: "For CREATE AGGREGATE FUNCTION parameters: false when the SQL has NOT AGGREGATE, true for aggregate parameters. Null for non-UDAF routines. google_bigquery_routine does not expose this field yet.",
+							MarkdownDescription: "For CREATE AGGREGATE FUNCTION parameters: false when the SQL includes NOT AGGREGATE, true for aggregate parameters. Null for non-UDAF routines. google_bigquery_routine does not expose this field yet.",
 							Computed:            true,
 						},
 					},
 				},
 			},
 			"remote_function_options": schema.SingleNestedAttribute{
-				Computed: true,
+				MarkdownDescription: "Remote function options when present.",
+				Computed:            true,
 				Attributes: map[string]schema.Attribute{
-					"connection": schema.StringAttribute{Computed: true},
-					"endpoint":   schema.StringAttribute{Computed: true},
+					"connection": schema.StringAttribute{
+						MarkdownDescription: "Connection resource name for the remote function.",
+						Computed:            true,
+					},
+					"endpoint": schema.StringAttribute{
+						MarkdownDescription: "Remote function endpoint URL.",
+						Computed:            true,
+					},
 				},
 			},
 			"spark_options": schema.SingleNestedAttribute{
-				Computed: true,
+				MarkdownDescription: "If language is PYTHON, JAVA, or SCALA, options for a Spark stored procedure.",
+				Computed:            true,
 				Attributes: map[string]schema.Attribute{
 					"raw": schema.StringAttribute{
 						MarkdownDescription: "Raw spark options JSON when present.",
