@@ -1,0 +1,39 @@
+---
+page_title: "{{.Name}} Data Source - {{.ProviderName}}"
+subcategory: ""
+description: |-
+  {{ .Description | trimspace }}
+---
+
+# {{.Name}}
+
+This data source parses a BigQuery CREATE SQL statement from a string and supplies its parts as attributes that can be used to fill the arguments of the BigQuery Terraform `google_bigquery_routine` resource.
+
+## Caveats
+
+- It can handle the `CREATE FUNCTION`, `CREATE TABLE FUNCTION`, `CREATE PROCEDURE`, or `CREATE AGGREGATE FUNCTION` SQL statements.
+- A `CREATE TEMPORARY FUNCTION` SQL statement will produce an error because the Terraform state requires the object to exist and would fail in this case.
+
+## Example Usage
+
+### Parsing SQL and creating a TABLE FUNCTION in BigQuery
+
+In this example, the TABLE FUNCTION is created in BigQuery using an inline SQL statement inside the Terraform code:
+
+{{ tffile "examples/data-sources/bqutils_routine_parser/data-source.tf" }}
+
+### Loading SQL from a file to create a BigQuery routine
+
+In this example, the TABLE FUNCTION is created in BigQuery using an SQL loaded from the following file in the Terraform module folder:
+
+{{ codefile "sql" "examples/data-sources/bqutils_routine_parser/mydataset.scaled_sum.sql" }}
+
+The Terraform code to create the TABLE FUNCTION is:
+
+{{ tffile "examples/data-sources/bqutils_routine_parser/data-source.file.tf" }}
+
+### Parsing SQL and creating a JavaScript FUNCTION in BigQuery
+
+{{ tffile "examples/data-sources/bqutils_routine_parser/data-source.javascript.tf" }}
+
+{{ .SchemaMarkdown | trimspace }}
