@@ -1,9 +1,9 @@
-# Parses a TABLE FUNCTION from inline SQL for google_bigquery_routine.
-
+# Gets the BigQuery dataset where the routine is created.
 data "google_bigquery_dataset" "mydataset" {
   dataset_id = "mydataset"
 }
 
+# Parses a TABLE FUNCTION from inline SQL mixed/interpolated with values from other datasources.
 data "bqutils_routine_parser" "list_partitions" {
   sql = <<EOF
     CREATE OR REPLACE TABLE FUNCTION mydataset.list_partitions
@@ -25,10 +25,10 @@ data "bqutils_routine_parser" "list_partitions" {
     );
   EOF
 
-  trim_comments    = false
   trim_indentation = true
 }
 
+# Create the routine in BigQuery using the attributes parsed from the SQL above.
 resource "google_bigquery_routine" "list_partitions" {
   dataset_id = data.google_bigquery_dataset.mydataset.dataset_id
 

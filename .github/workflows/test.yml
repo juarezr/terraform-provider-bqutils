@@ -70,4 +70,7 @@ jobs:
           TF_ACC: 1
         run: go test ./internal/provider/ -v -count=1 -timeout 20m
 
+      - name: Run Documentation Tests
+        run: go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate --provider-name bqutils
+
 ## End of file -------------------------------------------------------------------- ##

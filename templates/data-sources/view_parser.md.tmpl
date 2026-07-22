@@ -5,9 +5,9 @@ description: |-
   {{ .Description | trimspace }}
 ---
 
-# {{.Name}} (Data Source)
+# {{.Name}}
 
-Parses a BigQuery `CREATE VIEW` or `CREATE MATERIALIZED VIEW` statement.
+Parses a BigQuery `CREATE VIEW` or `CREATE MATERIALIZED VIEW` SQL statement and exposes their values in attributes so they can be used fill the arguments of the [google_bigquery_table](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_table) resource that will create the views in BigQuery.
 
 ## Caveats
 
@@ -18,17 +18,17 @@ Parses a BigQuery `CREATE VIEW` or `CREATE MATERIALIZED VIEW` statement.
 
 ### Loading SQL from a file to create a BigQuery view
 
-In this example, the VIEW is created in BigQuery using SQL loaded from the following file in the Terraform module folder:
+In this example, the VIEW is created in BigQuery using the content loaded from a file in the same Terraform module folder containing a SQL statement like this:
 
 {{ codefile "sql" "examples/data-sources/bqutils_view_parser/mydataset.my_simple_view.sql" }}
 
-The Terraform code to create the VIEW is:
+The code uses the Terraform [file](https://developer.hashicorp.com/terraform/language/functions/file) function to read the SQL and wire in the code to to the datasource and resources to create the VIEW in BigQuery as follows:
 
-{{ tffile "examples/data-sources/bqutils_view_parser/data-source.tf" }}
+{{ tffile "examples/data-sources/bqutils_view_parser/data-source.file.tf" }}
 
 ### Parsing SQL and creating a VIEW in BigQuery
 
-{{ tffile "examples/data-sources/bqutils_view_parser/data-source.view.tf" }}
+{{ tffile "examples/data-sources/bqutils_view_parser/data-source.inline.tf" }}
 
 ### Creating a MATERIALIZED VIEW in BigQuery
 

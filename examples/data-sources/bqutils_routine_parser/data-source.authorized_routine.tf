@@ -1,23 +1,21 @@
-# Dataset where the routine is created.
+# Load the routine SQL from a file in the same folder as the Terraform code.
+data "bqutils_routine_parser" "list_tables" {
+  sql = file("${path.module}/mydataset.list_tables.sql")
 
+  trim_body = true
+}
+
+# Gets the BigQuery dataset where the routine is created.
 data "google_bigquery_dataset" "mydataset1" {
   dataset_id = "mydataset1"
 }
 
-# Dataset the routine reads from (authorize the routine on this dataset).
-
+# Gets the BigQuery dataset where the routine reads from (authorize the routine on this dataset).
 data "google_bigquery_dataset" "mydataset2" {
   dataset_id = "mydataset2"
 }
 
-# Load the routine SQL from a file in the same folder as the Terraform code.
-
-data "bqutils_routine_parser" "list_tables" {
-  sql = file("${path.module}/mydataset.list_tables.sql")
-}
-
 # Create the routine in BigQuery using the attributes parsed from the SQL file.
-
 resource "google_bigquery_routine" "list_tables" {
   dataset_id = data.google_bigquery_dataset.mydataset1.dataset_id
 
@@ -38,8 +36,9 @@ resource "google_bigquery_routine" "list_tables" {
   definition_body = data.bqutils_routine_parser.list_tables.definition_body
 }
 
-# Grant authorized-routine access on mydataset2 when the SQL text of the routine changes.
-
+# Grant authorized-routine access on mydataset2 after the routine is created/modified
+# The lifecycle block triggers modification when the routine SQL content changes in
+# the previous google_bigquery_routine resource.
 resource "google_bigquery_dataset_access" "list_tables" {
   dataset_id = data.google_bigquery_dataset.mydataset2.dataset_id
 

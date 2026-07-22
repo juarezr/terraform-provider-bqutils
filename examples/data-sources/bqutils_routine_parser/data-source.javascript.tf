@@ -1,5 +1,4 @@
 # Parses a JavaScript FUNCTION from inline SQL.
-
 data "bqutils_routine_parser" "parse_json_to_array" {
   sql = <<EOF
     CREATE OR REPLACE FUNCTION parse_json_to_array(json_str STRING)
@@ -14,13 +13,15 @@ data "bqutils_routine_parser" "parse_json_to_array" {
     """;
   EOF
 
-  trim_body = true
+  trim_indentation = true
 }
 
+# Gets the BigQuery dataset where the routine is created.
 data "google_bigquery_dataset" "mydataset" {
   dataset_id = "mydataset"
 }
 
+# Create the routine in BigQuery using the attributes parsed from the SQL above.
 resource "google_bigquery_routine" "parse_json_to_array" {
   dataset_id = data.google_bigquery_dataset.mydataset.dataset_id
 

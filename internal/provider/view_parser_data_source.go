@@ -51,7 +51,7 @@ func (d *ViewParserDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 		MarkdownDescription: "Parses a BigQuery CREATE VIEW or CREATE MATERIALIZED VIEW statement and exposes attributes for google_bigquery_table.",
 		Attributes: map[string]schema.Attribute{
 			"sql": schema.StringAttribute{
-				MarkdownDescription: "Full CREATE VIEW statement SQL text.",
+				MarkdownDescription: "SQL text containing the CREATE VIEW or CREATE MATERIALIZED VIEW statement to be parsed.",
 				Required:            true,
 			},
 			"trim_body": schema.BoolAttribute{
@@ -63,7 +63,7 @@ func (d *ViewParserDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 				Optional:            true,
 			},
 			"trim_indentation": schema.BoolAttribute{
-				MarkdownDescription: "Remove the common first-level leading whitespace from each line of query (deeper indentation is kept). Useful for SQL embedded in indented Terraform heredocs. Defaults to false.",
+				MarkdownDescription: "Remove the common first-level leading whitespace from each line of query (deeper indentation is kept). Useful for SQL embedded in indented Terraform heredocs. Defaults to true.",
 				Optional:            true,
 			},
 			"id": schema.StringAttribute{
@@ -83,24 +83,24 @@ func (d *ViewParserDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 				Computed:            true,
 			},
 			"query": schema.StringAttribute{
-				MarkdownDescription: "View query body after AS.",
+				MarkdownDescription: "View query body after the AS element in the SQL statement.",
 				Computed:            true,
 			},
 			"description": schema.StringAttribute{
-				MarkdownDescription: "Description from OPTIONS, if present.",
+				MarkdownDescription: "Description from the OPTIONS section of the SQL statement, if present.",
 				Computed:            true,
 			},
 			"friendly_name": schema.StringAttribute{
-				MarkdownDescription: "Friendly name from OPTIONS, if present.",
+				MarkdownDescription: "Friendly name from the OPTIONS section of the SQL statement, if present.",
 				Computed:            true,
 			},
 			"labels": schema.MapAttribute{
 				ElementType:         types.StringType,
-				MarkdownDescription: "Labels from OPTIONS, if present.",
+				MarkdownDescription: "Labels from the OPTIONS section of the SQL statement, if present.",
 				Computed:            true,
 			},
 			"is_materialized": schema.BoolAttribute{
-				MarkdownDescription: "True when the statement is CREATE MATERIALIZED VIEW.",
+				MarkdownDescription: "Gives `True` when the SQL statement is CREATE MATERIALIZED VIEW, `False` otherwise.",
 				Computed:            true,
 			},
 			"schema": schema.StringAttribute{
@@ -108,7 +108,7 @@ func (d *ViewParserDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 				Computed:            true,
 			},
 			"enable_refresh": schema.BoolAttribute{
-				MarkdownDescription: "Materialized view enable_refresh option when present.",
+				MarkdownDescription: "Materialized view enable_refresh from the OPTIONS section when present.",
 				Computed:            true,
 			},
 			"allow_non_incremental_definition": schema.BoolAttribute{
@@ -116,7 +116,7 @@ func (d *ViewParserDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 				Computed:            true,
 			},
 			"refresh_interval_ms": schema.Int64Attribute{
-				MarkdownDescription: "Converted from refresh_interval_minutes when present.",
+				MarkdownDescription: "Converted from refresh_interval_minutes from the OPTIONS section when present.",
 				Computed:            true,
 			},
 			"max_staleness": schema.StringAttribute{
@@ -124,20 +124,20 @@ func (d *ViewParserDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 				Computed:            true,
 			},
 			"kms_key_name": schema.StringAttribute{
-				MarkdownDescription: "KMS key name from OPTIONS, if present.",
+				MarkdownDescription: "KMS key name from the OPTIONS section of the SQL statement, if present.",
 				Computed:            true,
 			},
 			"partitioning_type": schema.StringAttribute{
-				MarkdownDescription: "Time partitioning type derived from PARTITION BY when present.",
+				MarkdownDescription: "Time partitioning type derived from PARTITION BY clause in the SQL statement when present.",
 				Computed:            true,
 			},
 			"partitioning_field": schema.StringAttribute{
-				MarkdownDescription: "Partitioning field derived from PARTITION BY when present.",
+				MarkdownDescription: "Partitioning field derived from PARTITION BY clause in the SQL statement when present.",
 				Computed:            true,
 			},
 			"clustering": schema.ListAttribute{
 				ElementType:         types.StringType,
-				MarkdownDescription: "Clustering columns from CLUSTER BY when present.",
+				MarkdownDescription: "Clustering columns from CLUSTER BY clause in the SQL statement when present.",
 				Computed:            true,
 			},
 		},
@@ -159,7 +159,7 @@ func (d *ViewParserDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	if !data.TrimComments.IsNull() && !data.TrimComments.IsUnknown() {
 		trimComments = data.TrimComments.ValueBool()
 	}
-	trimIndentation := false
+	trimIndentation := true
 	if !data.TrimIndentation.IsNull() && !data.TrimIndentation.IsUnknown() {
 		trimIndentation = data.TrimIndentation.ValueBool()
 	}

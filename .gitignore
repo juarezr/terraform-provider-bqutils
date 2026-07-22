@@ -33,10 +33,6 @@ crash.log
 
 terraform-provider-*
 
-# yacc leftover
-y.output
-y.go
-
 # Editor/IDE
 # .idea/
 # .vscode/

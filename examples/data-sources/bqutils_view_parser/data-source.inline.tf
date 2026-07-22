@@ -1,5 +1,4 @@
-# Parse a VIEW and create google_bigquery_table.
-
+# Parse a CREATE VIEW from the inline SQL statement and expose its values in attributes.
 data "bqutils_view_parser" "simple_view" {
   sql = <<EOF
     CREATE OR REPLACE VIEW `mydataset`.my_simple_view
@@ -19,12 +18,16 @@ data "bqutils_view_parser" "simple_view" {
         , managed_table_type
       FROM mydataset.INFORMATION_SCHEMA.TABLES;
   EOF
+
+  trim_indentation = true
 }
 
+# Gets the BigQuery dataset where the view is created.
 data "google_bigquery_dataset" "mydataset" {
   dataset_id = "mydataset"
 }
 
+# Create the view in BigQuery using the attributes parsed from the SQL above.
 resource "google_bigquery_table" "simple_view" {
   dataset_id = data.google_bigquery_dataset.mydataset.dataset_id
 
