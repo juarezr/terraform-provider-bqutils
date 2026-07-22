@@ -25,22 +25,22 @@ data "bqutils_view_parser" "example" {
 data "bqutils_view_parser" "simple_view" {
 
   sql = <<EOF
-    CREATE OR REPLACE VIEW IF NOT EXISTS `mydataset.my_simple_view`
+    CREATE OR REPLACE VIEW  `mydataset`.my_simple_view
     (
-      TABLE_SCHEMA OPTIONS(description="The schema of the table"),
-      TABLE_NAME         OPTIONS(description="The name of the table"),
-      TABLE_TYPE         OPTIONS(description="The type of the table"),
-      TABLE_CREATION_TIME OPTIONS(description="The creation time of the table"),
-      TABLE_UPDATE_TIME  OPTIONS(description="The update time of the table")
+      table_schema       OPTIONS(description="The schema of the table"),
+      table_name         OPTIONS(description="The name of the table"),
+      creation_time      OPTIONS(description="The creation time of the table"),
+      table_type         OPTIONS(description="The type of the table"),
+      managed_table_type OPTIONS(description="The managed type of the table")
     ) OPTIONS(
       description="Simple view created by Terraform"
     ) AS
-      SELECT TABLE_SCHEMA
-        , TABLE_NAME
-        , TABLE_TYPE
-        , TABLE_CREATION_TIME
-        , TABLE_UPDATE_TIME
-      FROM mydataset.INFORMATION_SCHEMA.TABLES;
+      SELECT table_schema
+        , table_name
+        , creation_time
+        , table_type
+        , managed_table_type
+      FROM appfleet.INFORMATION_SCHEMA.TABLES;
   EOF
 }
 
@@ -62,6 +62,8 @@ resource "google_bigquery_table" "simple_view" {
   view {
     # The SQL query that defines the materialized view: After AS elment in SQL Syntax
     query = data.bqutils_view_parser.simple_view.query
+
+    use_legacy_sql = false
   }
 }
 ```
@@ -72,26 +74,23 @@ resource "google_bigquery_table" "simple_view" {
 data "bqutils_view_parser" "materialized_view" {
 
   sql = <<EOF
-    CREATE OR REPLACE MATERIALIZED VIEW IF NOT EXISTS `mydataset.my_materialized_view`
-    PARTITION BY DATE(TABLE_CREATION_TIME)
-    CLUSTER BY TABLE_SCHEMA, TABLE_NAME
+    CREATE OR REPLACE MATERIALIZED VIEW `mydataset`.my_materialized_view
+    PARTITION BY DATE(creation_time)
+    CLUSTER BY custormer_name, order_id
     OPTIONS(
       description="Materialized view created by Terraform",
       enable_refresh=TRUE,
       allow_non_incremental_definition=FALSE,
       refresh_interval_minutes=60,
-      max_staleness=INTERVAL "4:0:0" HOUR TO SECOND,
-      retain_partitions=true,
+      max_staleness=INTERVAL 90 MINUTE,
       kms_key_name="projects/1234567890/locations/global/keyRings/my-key-ring/cryptoKeys/my-key",
       labels=[("org_unit", "development")]
     ) AS
-      SELECT TABLE_SCHEMA
-        , TABLE_NAME
-        , TABLE_TYPE
-        , TABLE_COMMENT
-        , TABLE_CREATION_TIME
-        , TABLE_UPDATE_TIME
-      FROM mydataset.INFORMATION_SCHEMA.TABLES;
+      SELECT order_id
+        , custormer_name
+        , delivery_type
+        , creation_time
+      FROM mydataset.orders AS o;
   EOF
 }
 
