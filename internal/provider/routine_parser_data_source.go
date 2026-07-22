@@ -22,6 +22,7 @@ type routineParserModel struct {
 	SQL                   types.String `tfsdk:"sql"`
 	TrimBody              types.Bool   `tfsdk:"trim_body"`
 	TrimComments          types.Bool   `tfsdk:"trim_comments"`
+	TrimIndentation       types.Bool   `tfsdk:"trim_indentation"`
 	ID                    types.String `tfsdk:"id"`
 	Project               types.String `tfsdk:"project"`
 	DatasetID             types.String `tfsdk:"dataset_id"`
@@ -58,6 +59,10 @@ func (d *RoutineParserDataSource) Schema(_ context.Context, _ datasource.SchemaR
 			},
 			"trim_comments": schema.BoolAttribute{
 				MarkdownDescription: "Remove SQL comments from definition_body. Defaults to false.",
+				Optional:            true,
+			},
+			"trim_indentation": schema.BoolAttribute{
+				MarkdownDescription: "Remove the common first-level leading whitespace from each line of definition_body (deeper indentation is kept). Useful for SQL embedded in indented Terraform heredocs. Defaults to false.",
 				Optional:            true,
 			},
 			"id": schema.StringAttribute{
@@ -184,10 +189,15 @@ func (d *RoutineParserDataSource) Read(ctx context.Context, req datasource.ReadR
 	if !data.TrimComments.IsNull() && !data.TrimComments.IsUnknown() {
 		trimComments = data.TrimComments.ValueBool()
 	}
+	trimIndentation := false
+	if !data.TrimIndentation.IsNull() && !data.TrimIndentation.IsUnknown() {
+		trimIndentation = data.TrimIndentation.ValueBool()
+	}
 
 	result, err := sqlparse.ParseRoutine(data.SQL.ValueString(), sqlparse.Options{
-		TrimBody:     trimBody,
-		TrimComments: trimComments,
+		TrimBody:        trimBody,
+		TrimComments:    trimComments,
+		TrimIndentation: trimIndentation,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("SQL parse error", err.Error())
@@ -197,6 +207,7 @@ func (d *RoutineParserDataSource) Read(ctx context.Context, req datasource.ReadR
 	data.ID = types.StringValue(resourceID("routines", result.Project, result.DatasetID, result.ObjectID))
 	data.TrimBody = types.BoolValue(trimBody)
 	data.TrimComments = types.BoolValue(trimComments)
+	data.TrimIndentation = types.BoolValue(trimIndentation)
 	data.Project = stringOrNull(result.Project)
 	data.DatasetID = stringOrNull(result.DatasetID)
 	data.RoutineID = types.StringValue(result.ObjectID)

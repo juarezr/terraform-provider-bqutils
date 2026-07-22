@@ -11,8 +11,8 @@ This data source parses a BigQuery CREATE SQL statement from a string and suppli
 
 ## Caveats
 
-- It can handle the `CREATE FUNCTION`, `CREATE TABLE FUNCTION`, `CREATE PROCEDURE`, or `CREATE AGGREGATE FUNCTION` SQL statements.
-- A `CREATE TEMPORARY FUNCTION` SQL statement will produce an error because the Terraform state requires the object to exist and would fail in this case.
+- The datasource can handle the `CREATE FUNCTION`, `CREATE TABLE FUNCTION`, `CREATE PROCEDURE`, or `CREATE AGGREGATE FUNCTION` SQL statements.
+- A `CREATE TEMPORARY FUNCTION` SQL statement will produce an error because they cannot be managed as persistent BigQuery objects.
 
 ## Example Usage
 
@@ -48,7 +48,8 @@ data "bqutils_routine_parser" "list_partitions" {
     );
   EOF
 
-  trim_comments = false
+  trim_comments    = false
+  trim_indentation = true
 }
 
 resource "google_bigquery_routine" "list_partitions" {
@@ -275,6 +276,7 @@ resource "google_bigquery_dataset_access" "list_tables" {
 
 - `trim_body` (Boolean) Trim leading/trailing whitespace and empty lines from definition_body. Defaults to true.
 - `trim_comments` (Boolean) Remove SQL comments from definition_body. Defaults to false.
+- `trim_indentation` (Boolean) Remove the common first-level leading whitespace from each line of definition_body (deeper indentation is kept). Useful for SQL embedded in indented Terraform heredocs. Defaults to false.
 
 ### Read-Only
 

@@ -25,7 +25,8 @@ data "bqutils_routine_parser" "list_partitions" {
     );
   EOF
 
-  trim_comments = false
+  trim_comments    = false
+  trim_indentation = true
 }
 
 resource "google_bigquery_routine" "list_partitions" {

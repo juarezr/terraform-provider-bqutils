@@ -9,6 +9,11 @@ description: |-
 
 Parses a BigQuery `CREATE VIEW` or `CREATE MATERIALIZED VIEW` statement.
 
+## Caveats
+
+- The datasource can handle the `CREATE VIEW` and the `CREATE MATERIALIZED VIEW` SQL statements.
+- Unmappable `OPTIONS` (for example `retain_partitions`) from the SQL statement are ignored.
+
 ## Example Usage
 
 ### Loading SQL from a file to create a BigQuery view
@@ -173,6 +178,7 @@ resource "google_bigquery_table" "materialized_view" {
 
 - `trim_body` (Boolean) Trim leading/trailing whitespace and empty lines from query. Defaults to true.
 - `trim_comments` (Boolean) Remove SQL comments from query. Defaults to false.
+- `trim_indentation` (Boolean) Remove the common first-level leading whitespace from each line of query (deeper indentation is kept). Useful for SQL embedded in indented Terraform heredocs. Defaults to false.
 
 ### Read-Only
 

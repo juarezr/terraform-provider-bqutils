@@ -503,9 +503,11 @@ func captureBody(input string, startOffset int) (body string, endOffset int, err
 				depth--
 				if depth == 0 {
 					i++
-					// content inside parens, excluding outer parens
-					inner := strings.TrimSpace(input[start+1 : i-1])
-					return inner, i, nil
+					// Content inside parens, excluding outer parens. Do not
+					// TrimSpace here so TrimIndentation can see common indent
+					// on every line (including the first). TrimBody handles
+					// leading/trailing whitespace when enabled.
+					return input[start+1 : i-1], i, nil
 				}
 			} else if c == '-' && i+1 < len(input) && input[i+1] == '-' {
 				i += 2
@@ -592,7 +594,8 @@ func captureBody(input string, startOffset int) (body string, endOffset int, err
 						if j < len(input) && input[j] == ';' {
 							j++
 						}
-						return strings.TrimSpace(input[start:i]), j, nil
+						// Preserve leading indent for TrimIndentation; TrimBody cleans edges.
+						return input[start:i], j, nil
 					}
 				}
 				continue
@@ -602,8 +605,13 @@ func captureBody(input string, startOffset int) (body string, endOffset int, err
 		return "", i, &ParseError{Message: "unterminated BEGIN/END body", Line: line, Column: col, Offset: start}
 	}
 
-	// View-style: rest until semicolon (not inside strings)
+	// View-style: rest until semicolon (not inside strings).
 	start := i
+	// Rewind past horizontal whitespace so the first line keeps its indent
+	// for TrimIndentation (the scanner above skipped it to find content).
+	for start > 0 && (input[start-1] == ' ' || input[start-1] == '\t') {
+		start--
+	}
 	inStr := byte(0)
 	for i < len(input) {
 		c := input[i]
@@ -634,9 +642,10 @@ func captureBody(input string, startOffset int) (body string, endOffset int, err
 			continue
 		}
 		if c == ';' {
-			return strings.TrimSpace(input[start:i]), i + 1, nil
+			// Preserve leading indent for TrimIndentation; TrimBody cleans edges.
+			return input[start:i], i + 1, nil
 		}
 		i++
 	}
-	return strings.TrimSpace(input[start:]), i, nil
+	return input[start:], i, nil
 }

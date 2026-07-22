@@ -8,8 +8,9 @@ import (
 
 // Options controls post-processing of the parsed body.
 type Options struct {
-	TrimBody     bool
-	TrimComments bool
+	TrimBody        bool
+	TrimComments    bool
+	TrimIndentation bool
 }
 
 // Parse parses a single BigQuery CREATE routine or view statement.
@@ -46,6 +47,10 @@ func Parse(sql string, opts Options) (*ParseResult, error) {
 	body := res.DefinitionBody
 	if res.Query != "" {
 		body = res.Query
+	}
+	// Indentation first so common leading whitespace is still present on all lines.
+	if opts.TrimIndentation {
+		body = TrimIndentation(body)
 	}
 	if opts.TrimComments {
 		body = TrimComments(body)
