@@ -5,25 +5,34 @@ description: |-
   Parses BigQuery CREATE FUNCTION / PROCEDURE SQL for google_bigquery_routine.
 ---
 
-# bqutils_routine_parser (Data Source)
+# bqutils_routine_parser
 
-Parses a BigQuery CREATE SQL statement from a string and fills its attributes for use with the BigQuery Terraform `google_bigquery_routine` resource.
+This datasource parses a BigQuery CREATE SQL statement from a string and supply its parts as attributes that can be used to fill the arguments of the BigQuery Terraform `google_bigquery_routine` resource.
+
+## Overview
 
 Its main use case is creating and updating BigQuery routines with Terraform, loading them from SQL files.
 
-Beneficts:
+### Beneficts
 
-- It removes the need to slice the routine source code into parts like arguments, body, and return type for filling the `google_bigquery_routine` resource.
+- It removes the need to manyally slice the routine source code into parts like arguments, body, and return type for feeding the `google_bigquery_routine` resource.
 - It lets you use the same SQL source file to provision with Terraform or to execute in the BigQuery Console.
 - It takes care of applying only the routines that were modified and must be applied in another environment without tracking them manually. Terraform will only modify routines that are modified.
 - It allows you to keep your routines always up to date in all BigQuery environments you have.
 - You can also use git for versioning the Terraform and SQL files, so you can track the impact of changes and bugs introduced in your routines.
 
-Restriction:
+### Restrictions
 
 - It can handle the `CREATE FUNCTION`, `CREATE TABLE FUNCTION`, `CREATE PROCEDURE`, or `CREATE AGGREGATE FUNCTION` SQL statements.
 - A `CREATE TEMPORARY FUNCTION` SQL statement will produce an error because the Terraform state requires the object to exist and would fail in this case.
 - Terraform will "own" your routine source code. Any changes applied outside the plan/apply cycle will be overwritten.
+
+### Security
+
+The provider:
+
+- Does NOT access the filesystem, network, neither the terraform context or properties.
+- Only operates on the string passed to its argument in the Terraform code.
 
 ## Example Usage
 
@@ -31,7 +40,7 @@ Restriction:
 
 In this example, the attributes of a TABLE FUNCTION defined with SQL are parsed from a inline SQL Statement inside the Terraform code:
 
-```javascript
+```terraform
 # Terraform datasource pointing to the BigQuery dataset where the routine will be created/updated.
 
 data "google_bigquery_dataset" "mydataset" {
@@ -95,7 +104,7 @@ resource "google_bigquery_routine" "list_partitions" {
 
 This BigQuery javascript FUNCTION will be create from a inline SQL statement inside terraform code:
 
-```javascript
+```terraform
 # Parses the javascript FUNCTION from the inline SQL statement for filling arguments in google_bigquery_routine.
 
 data "bqutils_routine_parser" "parse_json_to_array" {
@@ -181,7 +190,7 @@ CREATE AGGREGATE FUNCTION mydataset.scaled_sum
 
 You can load the SQL statement text from the file using the following Terraform code:
 
-```javascript
+```terraform
 data "bqutils_routine_parser" "scaled_sum" {
 
   sql = file("${path.module}/mydataset.scaled_sum.sql")
@@ -236,7 +245,7 @@ To deal with this issue, you can automate the granting of permissions using the 
 
 Check the Terraform code below to understand how to synchronize the parsing, re-creation, and grant process using Terraform BigQuery resources and the `bqutils_routine_parser` data source.
 
-```javascript
+```terraform
 # Terraform datasource pointing to the BigQuery dataset where the routine will be created/updated.
 
 data "google_bigquery_dataset" "mydataset1" {
