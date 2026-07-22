@@ -28,10 +28,18 @@ testacc:
 generate:
 	cd internal/sqlparse && goyacc -o y.go -p yy parser.y
 	go generate ./...
+	gofmt -w ./internal/sqlparse
 
 .PHONY: fmt
 fmt:
 	gofmt -w .
+
+.PHONY: lint
+lint:
+	gofmt -l .
+
+.PHONY: check
+check: build test testacc docs
 
 .PHONY: tools
 tools:
@@ -39,8 +47,8 @@ tools:
 	go install github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@latest
 	go install golang.org/x/vuln/cmd/govulncheck@latest
 
-.PHONY: check
-check:
+.PHONY: verify
+verify:
 	govulncheck ./...
 
 .PHONY: docs
