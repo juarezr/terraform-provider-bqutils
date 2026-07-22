@@ -201,7 +201,7 @@ resource "google_bigquery_table" "materialized_view" {
 
 - `trim_body` (Boolean) Trim leading/trailing whitespace and empty lines from query. Defaults to true.
 - `trim_comments` (Boolean) Remove SQL comments from query. Defaults to false.
-- `trim_indentation` (Boolean) Remove the common first-level leading whitespace from each line of query (deeper indentation is kept). Useful for SQL embedded in indented Terraform heredocs. Defaults to false.
+- `trim_indentation` (Boolean) Remove the common first-level leading whitespace from each line of query (deeper indentation is kept). Useful for SQL embedded in indented Terraform heredocs. Defaults to true.
 
 ### Read-Only
 

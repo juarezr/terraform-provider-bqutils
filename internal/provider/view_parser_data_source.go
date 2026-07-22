@@ -63,7 +63,7 @@ func (d *ViewParserDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 				Optional:            true,
 			},
 			"trim_indentation": schema.BoolAttribute{
-				MarkdownDescription: "Remove the common first-level leading whitespace from each line of query (deeper indentation is kept). Useful for SQL embedded in indented Terraform heredocs. Defaults to false.",
+				MarkdownDescription: "Remove the common first-level leading whitespace from each line of query (deeper indentation is kept). Useful for SQL embedded in indented Terraform heredocs. Defaults to true.",
 				Optional:            true,
 			},
 			"id": schema.StringAttribute{
@@ -159,7 +159,7 @@ func (d *ViewParserDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	if !data.TrimComments.IsNull() && !data.TrimComments.IsUnknown() {
 		trimComments = data.TrimComments.ValueBool()
 	}
-	trimIndentation := false
+	trimIndentation := true
 	if !data.TrimIndentation.IsNull() && !data.TrimIndentation.IsUnknown() {
 		trimIndentation = data.TrimIndentation.ValueBool()
 	}

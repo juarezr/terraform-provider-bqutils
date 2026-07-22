@@ -281,7 +281,7 @@ resource "google_bigquery_dataset_access" "list_tables" {
 
 - `trim_body` (Boolean) Trim leading/trailing whitespace and empty lines from definition_body. Defaults to true.
 - `trim_comments` (Boolean) Remove SQL comments from definition_body. Defaults to false.
-- `trim_indentation` (Boolean) Remove the common first-level leading whitespace from each line of definition_body (deeper indentation is kept). Useful for SQL embedded in indented Terraform heredocs. Defaults to false.
+- `trim_indentation` (Boolean) Remove the common first-level leading whitespace from each line of definition_body (deeper indentation is kept). Useful for SQL embedded in indented Terraform heredocs. Defaults to true.
 
 ### Read-Only
 
