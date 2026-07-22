@@ -14,7 +14,7 @@ terraform {
   required_providers {
     bqutils = {
       source  = "juarezr/bqutils"
-      version = "~> 0.1"
+      version = "~> 0.2"
     }
   }
 }
@@ -98,12 +98,13 @@ resource "google_bigquery_routine" "list_tables" {
 
 ## Building and testing
 
+Check the [guides](guides/index.md) for common tasks.
+
+### Basic build and testing
+
 ```bash
 # Build
 make build
-
-# Install into local Terraform plugin directory
-make install
 
 # Unit tests (parser)
 go test ./internal/sqlparse/ -v
@@ -113,7 +114,28 @@ TF_ACC=1 go test ./internal/provider/ -v -count=1
 
 # Install docs tooling and regenerate provider docs
 make tools
-make generate
+
+# Run all tests
+make check
+```
+
+### Testing terraform with the provider locally installed
+
+```bash
+# Install into local Terraform plugin directory
+make install
+
+# Setup dev overrides pointing to local Terraform plugin directory
+make dev-override
+
+# Test your terraform module
+cd ~/src/terraform-module
+terraform init && terraform plan
+terraform apply -auto-approve && terraform destroy -auto-approve
+cd -
+
+# Remove dev overrides and binaries from the local Terraform plugin directory
+make uninstall
 ```
 
 ## Publishing to the Terraform Registry
