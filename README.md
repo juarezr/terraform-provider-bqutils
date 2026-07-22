@@ -1,6 +1,6 @@
 # terraform-provider-bqutils
 
-Terraform provider that parse `CREATE` SQL statements to make easier to create BigQuery routines and views with the [`hashicorp/google`](https://registry.terraform.io/providers/hashicorp/google/latest) provider.
+Terraform provider automates the creation and update of BigQuery functions/procedures/views by parsing `CREATE` SQL statements stored in SQL Scripts and connecting with the resources the [`hashicorp/google`](https://registry.terraform.io/providers/hashicorp/google/latest) provider for object creation.
 
 ## Requirements
 
@@ -34,28 +34,58 @@ Parses `CREATE FUNCTION` / `TABLE FUNCTION` / `PROCEDURE` / `AGGREGATE FUNCTION`
 
 Parses `CREATE VIEW` / `MATERIALIZED VIEW` and supplies attributes for creating a view with the `google_bigquery_table` resource (including `view` / `materialized_view` blocks, partitioning, clustering, labels, etc.).
 
-## Example (SQL from a file)
+## Usage Example
 
-```hcl
-data "bqutils_routine_parser" "fn" {
-  sql           = file("${path.module}/sql/list_partitions.sql")
-  trim_body     = true
-  trim_comments = false
+Using SQL from a file in the Terraform module folder:
+
+```sql
+CREATE OR REPLACE TABLE FUNCTION mydataset.list_tables
+(
+    table_name_filter STRING,
+    max_results       INT64
+)
+OPTIONS (
+    description = 'Used to show tables in another dataset.'
+) AS (
+  SELECT
+    t.table_name,
+    t.table_type,
+    t.creation_time,
+    t.is_typed
+   FROM `mydataset`.INFORMATION_SCHEMA.TABLES AS t
+  WHERE t.table_name LIKE CONCAT('%', COALESCE(table_name_filter,''), '%')
+  QUALIFY ROW_NUMBER() OVER(ORDER BY t.table_name) <= COALESCE(max_results, 200)
+);
+```
+
+```terraform
+# Load the Table FUNCTION SQL from a file in the same folder as the Terraform code.
+data "bqutils_routine_parser" "list_tables" {
+  sql = file("${path.module}/sql/list_tables.sql")
+
+  trim_body = true
 }
 
-resource "google_bigquery_routine" "fn" {
-  dataset_id      = google_bigquery_dataset.ds.dataset_id
-  routine_id      = data.bqutils_routine_parser.fn.routine_id
-  routine_type    = data.bqutils_routine_parser.fn.routine_type
-  language        = data.bqutils_routine_parser.fn.language
-  description     = data.bqutils_routine_parser.fn.description
-  definition_body = data.bqutils_routine_parser.fn.definition_body
+# Gets the BigQuery dataset where the routine is created.
+data "google_bigquery_dataset" "mydataset" {
+  dataset_id = "mydataset"
+}
+
+# Create the routine in BigQuery using the attributes parsed from the SQL file.
+resource "google_bigquery_routine" "list_tables" {
+  dataset_id      = google_bigquery_dataset.mydataset.dataset_id
+  routine_id      = data.bqutils_routine_parser.list_tables.routine_id
+  routine_type    = data.bqutils_routine_parser.list_tables.routine_type
+  language        = data.bqutils_routine_parser.list_tables.language
+  description     = data.bqutils_routine_parser.list_tables.description
+  definition_body = data.bqutils_routine_parser.list_tables.definition_body
 
   dynamic "arguments" {
-    for_each = data.bqutils_routine_parser.fn.arguments
+    for_each = data.bqutils_routine_parser.list_tables.arguments
     content {
-      name      = arguments.value.name
-      data_type = arguments.value.data_type
+      name          = arguments.value.name
+      data_type     = arguments.value.data_type
+      argument_kind = arguments.value.argument_kind
     }
   }
 }
