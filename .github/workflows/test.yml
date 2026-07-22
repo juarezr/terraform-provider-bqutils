@@ -1,16 +1,15 @@
-
 name: Tests
 on:
   pull_request:
     branches: [main]
     types: [opened, reopened, synchronize, ready_for_review]
     paths-ignore:
-      - 'README.md'
+      - "README.md"
 
   push:
     branches: ["main", "release/*"]
     paths-ignore:
-      - 'README.md'
+      - "README.md"
 
   workflow_dispatch:
     inputs:
@@ -29,17 +28,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@main
+      - name: Checkout Source Code
+        uses: actions/checkout@main
         with:
           ref: ${{ inputs.branch_commit_or_ref || '' }}
 
-      - uses: actions/setup-go@v7
+      - name: Setup Go
+        uses: actions/setup-go@v7
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
 
-      - run: go build -v .
+      - name: Run Build
+        run: go build -v .
 
-      - run: go test ./internal/sqlparse/ -v -count=1
+      - name: Run Tests
+        run: go test ./internal/sqlparse/ -v -count=1
 
   test:
     name: Acceptance Tests
@@ -47,15 +50,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@main
+      - name: Checkout Source Code
+        uses: actions/checkout@main
         with:
           ref: ${{ inputs.branch_commit_or_ref || '' }}
 
-      - uses: actions/setup-go@v7
+      - name: Setup Go
+        uses: actions/setup-go@v7
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
 
-      - uses: hashicorp/setup-terraform@v3
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_wrapper: false
-      - run: TF_ACC=1 go test ./internal/provider/ -v -count=1 -timeout 20m
+
+      - name: Run Acceptance Tests
+        env:
+          TF_ACC: 1
+        run: go test ./internal/provider/ -v -count=1 -timeout 20m
+
+## End of file -------------------------------------------------------------------- ##

@@ -1,12 +1,12 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
-
   release:
     types: [released]
+
+  # push:
+  #   tags:
+  #     - 'v*'
 
   workflow_dispatch:
     inputs:
@@ -27,26 +27,31 @@ jobs:
   goreleaser:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@main
+      - name: Checkout Source Code
+        uses: actions/checkout@main
         with:
+          ref: ${{ inputs.branch_commit_or_ref || '' }}
           fetch-depth: 0
 
-      - uses: actions/setup-go@v7
+      - name: Setup Go
+        uses: actions/setup-go@v7
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
 
       - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@v6
+        uses: crazy-max/ghaction-import-gpg@v7
         id: import_gpg
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.PASSPHRASE }}
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+
+## End of file -------------------------------------------------------------------- ##
