@@ -1,0 +1,60 @@
+# $title: "Code owners and review requests"
+# $description: Code owners are automatically requested for review when someone opens a pull request that modifies code that they own.
+# $documentation: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Group: global
+# These owners will be the default owners for everything in the repo.
+# Unless a later match takes precedence, these owners will be requested for review when someone opens a pull request.
+# Order is important; the last matching pattern takes the most precedence.
+
+*           @juarezr
+
+# Group: documentation
+# When someone opens a pull request that only modifies documentation, only these owners
+# and not the global owner(s) will be requested for a review.
+
+/templates/  @juarezr
+/docs/       @juarezr
+/examples/   @juarezr
+README.md    @juarezr
+
+# Group: code
+# When someone opens a pull request that only modifies the source code,
+# only these owners will be requested for a review.
+
+*.go         @juarezr
+go.*         @juarezr
+/internal/   @juarezr
+/tools/      @juarezr
+/provider/   @juarezr
+/utils/      @juarezr
+/vendor/     @juarezr
+/tests/      @juarezr
+/scripts/    @juarezr
+/bin/        @juarezr
+/config/     @juarezr
+
+# Group: guides
+# When someone opens a pull request that only modifies guides and repository documentation,
+# only these owners will be requested for a review.
+
+/guides/     @juarezr
+
+# Group: ci
+# When someone opens a pull request that only modifies guides and repository settings,
+# only these owners will be requested for a review.
+
+.github/dependabot.yaml   @juarezr
+.github/workflows/        @juarezr
+.goreleaser.yml           @juarezr
+.gitignore                @juarezr
+
+# Group: settings
+# When someone opens a pull request that only modifies guides and repository settings,
+# only these owners will be requested for a review.
+
+.github/CODEOWNERS        @juarezr
+CONTRIBUTING.md           @juarezr
+CODE_OF_CONDUCT.md        @juarezr
+LICENSE                   @juarezr
+PATENTS                   @juarezr
