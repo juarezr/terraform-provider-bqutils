@@ -93,6 +93,7 @@ jobs:
           file: coverage.xml
           language: Go
           label: code-coverage/go
+          fail-on-error: false
 
       - name: Run Documentation Tests
         run: go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate --provider-name bqutils
