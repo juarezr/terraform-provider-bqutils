@@ -21,6 +21,7 @@ on:
 
 permissions:
   contents: read
+  code-quality: write
 
 jobs:
   build:
@@ -53,7 +54,8 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@main
         with:
-          ref: ${{ inputs.branch_commit_or_ref || '' }}
+          # Prefer the PR head commit so coverage line numbers map to the diff.
+          ref: ${{ inputs.branch_commit_or_ref || github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Go
         uses: actions/setup-go@v7
@@ -84,6 +86,13 @@ jobs:
           gocover-cobertura < cover.out > coverage.xml
           go tool cover -func=cover.out -o coverage.log
 
+      - name: Upload coverage report
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/upload-code-coverage@v1
+        with:
+          file: coverage.xml
+          language: Go
+          label: code-coverage/go
 
       - name: Run Documentation Tests
         run: go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate --provider-name bqutils
