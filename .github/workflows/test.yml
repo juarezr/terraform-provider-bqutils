@@ -65,10 +65,25 @@ jobs:
         with:
           terraform_wrapper: false
 
-      - name: Run Acceptance Tests
+      - name: Install coverage tools
+        run: |
+          go install github.com/wadey/gocovmerge@latest
+          go install github.com/boumenot/gocover-cobertura@latest
+
+      - name: Run unit tests with coverage
+        run: go test ./internal/sqlparse/ -v -count=1 -coverprofile=sqlparse.cover -covermode=atomic
+
+      - name: Run Acceptance Tests with coverage
         env:
           TF_ACC: 1
-        run: go test ./internal/provider/ -v -count=1 -timeout 20m
+        run: go test ./internal/provider/ -v -count=1 -timeout 20m -coverprofile=provider.cover -covermode=atomic
+
+      - name: Merge and convert code coverage
+        run: |
+          gocovmerge sqlparse.cover provider.cover > cover.out
+          gocover-cobertura < cover.out > coverage.xml
+          go tool cover -func=cover.out -o coverage.log
+
 
       - name: Run Documentation Tests
         run: go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate --provider-name bqutils
