@@ -3,10 +3,12 @@ module github.com/juarezr/terraform-provider-bqutils
 go 1.26.5
 
 require (
+	github.com/boumenot/gocover-cobertura v1.5.0
 	github.com/hashicorp/terraform-plugin-docs v0.25.0
 	github.com/hashicorp/terraform-plugin-framework v1.19.0
 	github.com/hashicorp/terraform-plugin-go v0.31.0
 	github.com/hashicorp/terraform-plugin-testing v1.16.0
+	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 )
 
 require (
