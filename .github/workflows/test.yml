@@ -21,6 +21,7 @@ on:
 
 permissions:
   contents: read
+  code-quality: write
 
 jobs:
   build:
@@ -53,7 +54,8 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@main
         with:
-          ref: ${{ inputs.branch_commit_or_ref || '' }}
+          # Prefer the PR head commit so coverage line numbers map to the diff.
+          ref: ${{ inputs.branch_commit_or_ref || github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Go
         uses: actions/setup-go@v7
@@ -65,12 +67,58 @@ jobs:
         with:
           terraform_wrapper: false
 
-      - name: Run Acceptance Tests
+      - name: Install coverage tools
+        run: |
+          go install github.com/wadey/gocovmerge@latest
+          go install github.com/boumenot/gocover-cobertura@latest
+
+      - name: Run unit tests with coverage
+        run: go test ./internal/sqlparse/ -v -count=1 -coverprofile=sqlparse.cover -covermode=atomic
+
+      - name: Run Acceptance Tests with coverage
         env:
           TF_ACC: 1
-        run: go test ./internal/provider/ -v -count=1 -timeout 20m
+        run: go test ./internal/provider/ -v -count=1 -timeout 20m -coverprofile=provider.cover -covermode=atomic
+
+      - name: Merge and convert code coverage
+        run: |
+          gocovmerge sqlparse.cover provider.cover > cover.out
+          gocover-cobertura < cover.out > coverage.xml
+          go tool cover -func=cover.out -o coverage.log
+
+      - name: Upload coverage report
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/upload-code-coverage@v1
+        with:
+          file: coverage.xml
+          language: Go
+          label: code-coverage/go
+          fail-on-error: false
 
       - name: Run Documentation Tests
         run: go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate --provider-name bqutils
+
+      - name: Print coverage report
+        shell: bash
+        run: |
+          echo "::group::Generating coverage report"
+          echo "status=started" >> "${GITHUB_OUTPUT}";
+
+          printf '# Coverage Report\n\n' >> "${GITHUB_STEP_SUMMARY}";
+          printf '\n## Event Information\n\n' >> "${GITHUB_STEP_SUMMARY}";
+          echo '- github.ref_name: ${{ github.ref_name }}' >> "${GITHUB_STEP_SUMMARY}";
+          echo '- github.sha: ${{ github.sha }}' >> "${GITHUB_STEP_SUMMARY}";
+          echo '- pull_request.sha: ${{ github.event.pull_request.head.sha }}' >> "${GITHUB_STEP_SUMMARY}";
+
+          printf '\n## Coverage Information\n' >> "${GITHUB_STEP_SUMMARY}";
+          if make coverage-report; then
+            cat coverage.md >> "${GITHUB_STEP_SUMMARY}";
+          else
+            echo "- Failed to generate coverage report" >> "${GITHUB_STEP_SUMMARY}";
+            echo "::error::Failed to generate coverage report";
+          fi
+
+          echo "status=finished" >> "${GITHUB_OUTPUT}";
+          echo "::endgroup::"
 
 ## End of file -------------------------------------------------------------------- ##

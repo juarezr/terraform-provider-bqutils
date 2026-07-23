@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://json.schemastore.org/dependabot-2.0.json
+# $schema: https://json.schemastore.org/dependabot-2.0.json
+
+# $title: "Dependabot version updates"
+# $description: "Runs a monthly scan of the repository for package updates and create pull requests to update the dependencies."
+# $documentation: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+# $example: https://github.com/dependabot/dependabot-core/blob/main/.github/dependabot.yml
+
+# To get started with Dependabot version updates, you'll need to specify which
+# package ecosystems to update and where the package manifests are located.
+# Please see the documentation for all configuration options.
+
+version: 2
+
+multi-ecosystem-groups:
+  all:
+    target-branch: "main"
+    schedule:
+      interval: "monthly"
+    assignees:
+      - "juarezr"
+    labels: ["dependencies"]
+
+updates:
+  - package-ecosystem: "gomod"
+    multi-ecosystem-group: "all"
+    directory: "/"
+    exclude-paths:
+      - "README.md"
+      - "guides/**"
+      - "docs/**"
+      - "templates/**"
+      - "terraform-provider-*"
+      - "sketch/**"
+
+  - package-ecosystem: "github-actions"
+    multi-ecosystem-group: "all"
+    assignees:
+      - "juarezr"
+    directory: "/"
+    groups:
+      all-actions:
+        patterns: ["*"]
+
+  - package-ecosystem: "terraform"
+    multi-ecosystem-group: "all"
+    assignees:
+      - "juarezr"
+    directory: "/examples"
+
+## END of .github/dependabot.yml ##

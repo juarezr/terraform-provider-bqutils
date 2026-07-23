@@ -21,6 +21,25 @@ test:
 testacc:
 	TF_ACC=1 go test ./... -v -count=1 -timeout 120m
 
+.PHONY: coverage
+coverage:
+	go test ./internal/sqlparse/ -count=1 -coverprofile=sqlparse.cover -covermode=atomic
+	TF_ACC=1 go test ./internal/provider/ -count=1 -timeout 20m -coverprofile=provider.cover -covermode=atomic
+	gocovmerge sqlparse.cover provider.cover > cover.out
+	gocover-cobertura < cover.out > coverage.xml
+
+define COVERAGE_REPORT_TEXT
+| File | Line | Function | Coverage |
+|------|------|----------|----------|
+endef
+export COVERAGE_REPORT_TEXT
+
+.PHONY: coverage-report
+coverage-report:
+	go tool cover -func=cover.out -o coverage.log
+	echo "$${COVERAGE_REPORT_TEXT}" > coverage.md
+	cat coverage.log | sed -E -e 's/^total/total:average/' -e 's/[:\t]+/ | /g' -e 's/.*/| & |/' >> coverage.md
+
 .PHONY: fmt
 fmt:
 	gofmt -w .
@@ -46,7 +65,6 @@ provider_installation {
 	direct {}
 }
 endef
-
 export TERRAFORMRC_TEXT
 
 .PHONY: dev-override
@@ -64,11 +82,14 @@ clean:
 	rm -f ${BINARY}
 	rm -f *.log
 	rm -f *.tmp
+	rm -f *.cover cover.out coverage.*
 
 .PHONY: tools
 tools:
 	go install github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@latest
 	go install golang.org/x/vuln/cmd/govulncheck@latest
+	go install github.com/wadey/gocovmerge@latest
+	go install github.com/boumenot/gocover-cobertura@latest
 
 .PHONY: generate
 generate:
