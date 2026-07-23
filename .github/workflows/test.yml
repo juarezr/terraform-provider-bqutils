@@ -97,4 +97,27 @@ jobs:
       - name: Run Documentation Tests
         run: go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate --provider-name bqutils
 
+      - name: Print coverage report
+        shell: bash
+        run: |
+          echo "::group::Generating coverage report"
+          echo "status=started" >> "${GITHUB_OUTPUT}";
+
+          printf '# Coverage Report\n\n' >> "${GITHUB_STEP_SUMMARY}";
+          printf '\n## Event Information\n\n' >> "${GITHUB_STEP_SUMMARY}";
+          echo '- github.ref_name: ${{ github.ref_name }}' >> "${GITHUB_STEP_SUMMARY}";
+          echo '- github.sha: ${{ github.sha }}' >> "${GITHUB_STEP_SUMMARY}";
+          echo '- pull_request.sha: ${{ github.event.pull_request.head.sha }}' >> "${GITHUB_STEP_SUMMARY}";
+
+          printf '\n## Coverage Information\n' >> "${GITHUB_STEP_SUMMARY}";
+          if make coverage-report; then
+            cat coverage.md >> "${GITHUB_STEP_SUMMARY}";
+          else
+            echo "- Failed to generate coverage report" >> "${GITHUB_STEP_SUMMARY}";
+            echo "::error::Failed to generate coverage report";
+          fi
+
+          echo "status=finished" >> "${GITHUB_OUTPUT}";
+          echo "::endgroup::"
+
 ## End of file -------------------------------------------------------------------- ##
