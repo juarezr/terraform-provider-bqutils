@@ -66,3 +66,70 @@ func TestParseProcedure(t *testing.T) {
 		t.Fatalf("expected INSERT in body: %q", res.DefinitionBody)
 	}
 }
+
+func TestParseTableFunctionMyReport(t *testing.T) {
+	// Shape from sketch/samples/mydataset.myreport.sql: wide TABLE FUNCTION signature + AS (...).
+	sql := `
+    CREATE OR REPLACE TABLE FUNCTION mydataset.myreport
+    (
+        clientid           INTEGER,      -- All fields below are required
+        firstday           DATE,
+        lastday            DATE,
+        dawnstarts         SMALLINT,     -- From configuration of journey
+        morningstart       SMALLINT,
+        noonstarts         SMALLINT,
+        nightstarts        SMALLINT,
+        firstdayjourney    SMALLINT,
+        firsthourjourney   SMALLINT,
+        lastdayjourney     SMALLINT,
+        lasthourjourney    SMALLINT,
+        firsthourwork      SMALLINT,
+        lasthourwork       SMALLINT,
+        defaultdriver      BOOLEAN,      -- TRUE:defaultdriver FALSE:driverid NULL: Both
+        groupid            SMALLINT,     -- Exclusive: groupid XOR vehicleid
+        vehicleid          ARRAY<INTEGER>  -- Exclusive: groupid XOR vehicleid
+    ) OPTIONS (
+      description = 'Retrieves the report data'
+    ) AS (
+      SELECT
+        table_schema,
+        table_name,
+        partition_id,
+        total_rows
+      FROM mydataset.INFORMATION_SCHEMA.PARTITIONS
+      WHERE partition_id != '__NULL__'
+    );
+    `
+
+	res, err := ParseRoutine(sql, Options{TrimBody: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Kind != KindTableFunction {
+		t.Fatalf("kind=%s", res.Kind)
+	}
+	if res.DatasetID != "mydataset" || res.ObjectID != "myreport" {
+		t.Fatalf("name=%s.%s", res.DatasetID, res.ObjectID)
+	}
+	if res.Language != "SQL" {
+		t.Fatalf("lang=%s", res.Language)
+	}
+	if res.Description != "Retrieves the report data" {
+		t.Fatalf("desc=%q", res.Description)
+	}
+	if len(res.Arguments) != 16 {
+		t.Fatalf("args=%+v", res.Arguments)
+	}
+	if res.Arguments[0].Name != "clientid" || !strings.Contains(res.Arguments[0].DataTypeJSON, "INT64") {
+		t.Fatalf("clientid=%+v", res.Arguments[0])
+	}
+	if res.Arguments[13].Name != "defaultdriver" || !strings.Contains(res.Arguments[13].DataTypeJSON, "BOOL") {
+		t.Fatalf("defaultdriver=%+v", res.Arguments[13])
+	}
+	if res.Arguments[15].Name != "vehicleid" || !strings.Contains(res.Arguments[15].DataTypeJSON, "ARRAY") {
+		t.Fatalf("vehicleid=%+v", res.Arguments[15])
+	}
+	if !strings.Contains(res.DefinitionBody, "SELECT") {
+		t.Fatalf("expected SELECT in body: %q", res.DefinitionBody)
+	}
+}
