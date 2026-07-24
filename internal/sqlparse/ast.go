@@ -31,6 +31,44 @@ type ColumnDef struct {
 	Description string
 }
 
+// SparkOptions maps to google_bigquery_routine.spark_options.
+type SparkOptions struct {
+	Connection     string
+	RuntimeVersion string
+	ContainerImage string
+	Properties     map[string]string
+	MainFileURI    string
+	PyFileURIs     []string
+	JarURIs        []string
+	FileURIs       []string
+	ArchiveURIs    []string
+	MainClass      string
+}
+
+// PythonOptions maps to google_bigquery_routine.python_options.
+type PythonOptions struct {
+	EntryPoint string
+	Packages   []string
+}
+
+// ExternalRuntimeOptions maps to google_bigquery_routine.external_runtime_options.
+type ExternalRuntimeOptions struct {
+	ContainerMemory             string
+	ContainerCPU                string
+	RuntimeConnection           string
+	MaxBatchingRows             string
+	RuntimeVersion              string
+	ContainerRequestConcurrency string
+}
+
+// RemoteFunctionOptions maps to google_bigquery_routine.remote_function_options.
+type RemoteFunctionOptions struct {
+	Endpoint           string
+	Connection         string
+	MaxBatchingRows    string
+	UserDefinedContext map[string]string
+}
+
 // ParseResult holds parsed CREATE statement fields.
 type ParseResult struct {
 	Kind           ObjectKind
@@ -65,6 +103,12 @@ type ParseResult struct {
 	SchemaJSON                    string
 	Columns                       []ColumnDef
 
+	SparkOptions           *SparkOptions
+	PythonOptions          *PythonOptions
+	ExternalRuntimeOptions *ExternalRuntimeOptions
+	RemoteFunctionOptions  *RemoteFunctionOptions
+
+	// Legacy aliases filled for compatibility with older provider wiring.
 	SparkOptionsJSON          string
 	RemoteFunctionOptionsJSON string
 	RemoteConnection          string
@@ -84,4 +128,32 @@ func (e *ParseError) Error() string {
 		return fmt.Sprintf("line %d, col %d: %s", e.Line, e.Column, e.Message)
 	}
 	return e.Message
+}
+
+func (r *ParseResult) ensureSpark() *SparkOptions {
+	if r.SparkOptions == nil {
+		r.SparkOptions = &SparkOptions{}
+	}
+	return r.SparkOptions
+}
+
+func (r *ParseResult) ensurePython() *PythonOptions {
+	if r.PythonOptions == nil {
+		r.PythonOptions = &PythonOptions{}
+	}
+	return r.PythonOptions
+}
+
+func (r *ParseResult) ensureExternalRuntime() *ExternalRuntimeOptions {
+	if r.ExternalRuntimeOptions == nil {
+		r.ExternalRuntimeOptions = &ExternalRuntimeOptions{}
+	}
+	return r.ExternalRuntimeOptions
+}
+
+func (r *ParseResult) ensureRemote() *RemoteFunctionOptions {
+	if r.RemoteFunctionOptions == nil {
+		r.RemoteFunctionOptions = &RemoteFunctionOptions{}
+	}
+	return r.RemoteFunctionOptions
 }

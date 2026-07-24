@@ -207,7 +207,7 @@ func splitTopLevel(s string, sep rune) []string {
 	return parts
 }
 
-func tableTypeToJSON(columns []ColumnDef) (string, error) {
+func tableTypeToJSON(fields []structField) (string, error) {
 	// StandardSqlTableType-ish for return_table_type
 	type col struct {
 		Name string   `json:"name"`
@@ -217,11 +217,12 @@ func tableTypeToJSON(columns []ColumnDef) (string, error) {
 		Columns []col `json:"columns"`
 	}
 	var cols []col
-	for _, c := range columns {
-		cols = append(cols, col{
-			Name: c.Name,
-			Type: &stdType{TypeKind: "STRING"},
-		})
+	for _, f := range fields {
+		typ := f.Type
+		if typ == nil {
+			typ = &stdType{TypeKind: "STRING"}
+		}
+		cols = append(cols, col{Name: f.Name, Type: typ})
 	}
 	b, err := json.Marshal(tableType{Columns: cols})
 	if err != nil {
@@ -254,7 +255,7 @@ func columnsToSchemaJSON(cols []ColumnDef) (string, error) {
 }
 
 // tableArgTypeJSON builds data_type JSON for a TABLE argument.
-func tableArgTypeJSON(columns []ColumnDef) (string, error) {
+func tableArgTypeJSON(fields []structField) (string, error) {
 	type field struct {
 		Name string   `json:"name,omitempty"`
 		Type *stdType `json:"type"`
@@ -265,10 +266,14 @@ func tableArgTypeJSON(columns []ColumnDef) (string, error) {
 	payload := map[string]any{
 		"typeKind": "TABLE",
 	}
-	if len(columns) > 0 {
+	if len(fields) > 0 {
 		var cols []field
-		for _, c := range columns {
-			cols = append(cols, field{Name: c.Name, Type: &stdType{TypeKind: "STRING"}})
+		for _, f := range fields {
+			typ := f.Type
+			if typ == nil {
+				typ = &stdType{TypeKind: "STRING"}
+			}
+			cols = append(cols, field{Name: f.Name, Type: typ})
 		}
 		payload["tableType"] = tableType{Columns: cols}
 	}

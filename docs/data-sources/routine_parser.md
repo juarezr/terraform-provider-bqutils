@@ -291,16 +291,18 @@ resource "google_bigquery_dataset_access" "list_tables" {
 - `definition_body` (String) The body of the routine. For functions, this is the expression in the AS clause. If language=SQL, it is the substring inside (but excluding) the parentheses.
 - `description` (String) Description parsed from the SQL OPTIONS clause, if present.
 - `determinism_level` (String) Determinism level of a JavaScript UDF if defined. Possible values: DETERMINISM_LEVEL_UNSPECIFIED, DETERMINISTIC, NOT_DETERMINISTIC.
+- `external_runtime_options` (Attributes) External runtime options for Python UDFs (maps to google_bigquery_routine.external_runtime_options). (see [below for nested schema](#nestedatt--external_runtime_options))
 - `id` (String) Synthetic id matching google_bigquery_routine: projects/<project>/datasets/<dataset_id>/routines/<routine_id>. Missing project or dataset segments use the placeholder "any" (not exposed on project/dataset_id).
 - `imported_libraries` (List of String) If language is JAVASCRIPT, paths of imported JavaScript libraries.
 - `language` (String) The language of the routine. Possible values: SQL, JAVASCRIPT, PYTHON, JAVA, SCALA.
 - `project` (String) Project parsed from a three-part name, if present.
-- `remote_function_options` (Attributes) Remote function options when present. (see [below for nested schema](#nestedatt--remote_function_options))
+- `python_options` (Attributes) Python UDF options when present (maps to google_bigquery_routine.python_options). (see [below for nested schema](#nestedatt--python_options))
+- `remote_function_options` (Attributes) Remote function options when present (maps to google_bigquery_routine.remote_function_options). (see [below for nested schema](#nestedatt--remote_function_options))
 - `return_table_type` (String) JSON for RETURNS TABLE<...> when present (table-valued functions).
 - `return_type` (String) StandardSqlDataType as JSON schema for the function return type when present.
 - `routine_id` (String) Name of the routine parsed from the SQL statement.
 - `routine_type` (String) SCALAR_FUNCTION, TABLE_VALUED_FUNCTION, PROCEDURE, or AGGREGATE_FUNCTION.
-- `spark_options` (Attributes) If language is PYTHON, JAVA, or SCALA, then it returns the Spark options of the routine. (see [below for nested schema](#nestedatt--spark_options))
+- `spark_options` (Attributes) Spark stored procedure options when present (maps to google_bigquery_routine.spark_options). (see [below for nested schema](#nestedatt--spark_options))
 
 <a id="nestedatt--arguments"></a>
 ### Nested Schema for `arguments`
@@ -314,6 +316,28 @@ Read-Only:
 - `name` (String) The name of the routine argument.
 
 
+<a id="nestedatt--external_runtime_options"></a>
+### Nested Schema for `external_runtime_options`
+
+Read-Only:
+
+- `container_cpu` (String) Container CPU amount.
+- `container_memory` (String) Container memory (e.g. 512Mi).
+- `container_request_concurrency` (String) Max concurrent requests per container.
+- `max_batching_rows` (String) Max rows per batch to the external runtime.
+- `runtime_connection` (String) Connection used to run container code.
+- `runtime_version` (String) Language runtime version (e.g. python-3.11).
+
+
+<a id="nestedatt--python_options"></a>
+### Nested Schema for `python_options`
+
+Read-Only:
+
+- `entry_point` (String) Python entry point function name.
+- `packages` (List of String) Python packages to install.
+
+
 <a id="nestedatt--remote_function_options"></a>
 ### Nested Schema for `remote_function_options`
 
@@ -321,6 +345,8 @@ Read-Only:
 
 - `connection` (String) Connection resource name for the remote function.
 - `endpoint` (String) Remote function endpoint URL.
+- `max_batching_rows` (String) Max rows per batch sent to the remote service.
+- `user_defined_context` (Map of String) User-defined context key/value pairs.
 
 
 <a id="nestedatt--spark_options"></a>
@@ -328,4 +354,13 @@ Read-Only:
 
 Read-Only:
 
-- `raw` (String) Raw spark options JSON when present.
+- `archive_uris` (List of String) Archive URIs for executors.
+- `connection` (String) Spark connection resource name.
+- `container_image` (String) Custom container image.
+- `file_uris` (List of String) File URIs for executors.
+- `jar_uris` (List of String) JAR URIs.
+- `main_class` (String) Main class for Java/Scala.
+- `main_file_uri` (String) Main file/jar URI.
+- `properties` (Map of String) Spark configuration properties.
+- `py_file_uris` (List of String) Python files on PYTHONPATH.
+- `runtime_version` (String) Spark runtime version.

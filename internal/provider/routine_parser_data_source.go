@@ -19,26 +19,28 @@ func NewRoutineParserDataSource() datasource.DataSource {
 type RoutineParserDataSource struct{}
 
 type routineParserModel struct {
-	SQL                   types.String `tfsdk:"sql"`
-	TrimBody              types.Bool   `tfsdk:"trim_body"`
-	TrimComments          types.Bool   `tfsdk:"trim_comments"`
-	TrimIndentation       types.Bool   `tfsdk:"trim_indentation"`
-	ID                    types.String `tfsdk:"id"`
-	Project               types.String `tfsdk:"project"`
-	DatasetID             types.String `tfsdk:"dataset_id"`
-	RoutineID             types.String `tfsdk:"routine_id"`
-	RoutineType           types.String `tfsdk:"routine_type"`
-	DefinitionBody        types.String `tfsdk:"definition_body"`
-	Language              types.String `tfsdk:"language"`
-	ReturnType            types.String `tfsdk:"return_type"`
-	ReturnTableType       types.String `tfsdk:"return_table_type"`
-	Description           types.String `tfsdk:"description"`
-	ImportedLibraries     types.List   `tfsdk:"imported_libraries"`
-	DeterminismLevel      types.String `tfsdk:"determinism_level"`
-	DataGovernanceType    types.String `tfsdk:"data_governance_type"`
-	Arguments             types.List   `tfsdk:"arguments"`
-	RemoteFunctionOptions types.Object `tfsdk:"remote_function_options"`
-	SparkOptions          types.Object `tfsdk:"spark_options"`
+	SQL                    types.String `tfsdk:"sql"`
+	TrimBody               types.Bool   `tfsdk:"trim_body"`
+	TrimComments           types.Bool   `tfsdk:"trim_comments"`
+	TrimIndentation        types.Bool   `tfsdk:"trim_indentation"`
+	ID                     types.String `tfsdk:"id"`
+	Project                types.String `tfsdk:"project"`
+	DatasetID              types.String `tfsdk:"dataset_id"`
+	RoutineID              types.String `tfsdk:"routine_id"`
+	RoutineType            types.String `tfsdk:"routine_type"`
+	DefinitionBody         types.String `tfsdk:"definition_body"`
+	Language               types.String `tfsdk:"language"`
+	ReturnType             types.String `tfsdk:"return_type"`
+	ReturnTableType        types.String `tfsdk:"return_table_type"`
+	Description            types.String `tfsdk:"description"`
+	ImportedLibraries      types.List   `tfsdk:"imported_libraries"`
+	DeterminismLevel       types.String `tfsdk:"determinism_level"`
+	DataGovernanceType     types.String `tfsdk:"data_governance_type"`
+	Arguments              types.List   `tfsdk:"arguments"`
+	RemoteFunctionOptions  types.Object `tfsdk:"remote_function_options"`
+	SparkOptions           types.Object `tfsdk:"spark_options"`
+	PythonOptions          types.Object `tfsdk:"python_options"`
+	ExternalRuntimeOptions types.Object `tfsdk:"external_runtime_options"`
 }
 
 func (d *RoutineParserDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -147,7 +149,7 @@ func (d *RoutineParserDataSource) Schema(_ context.Context, _ datasource.SchemaR
 				},
 			},
 			"remote_function_options": schema.SingleNestedAttribute{
-				MarkdownDescription: "Remote function options when present.",
+				MarkdownDescription: "Remote function options when present (maps to google_bigquery_routine.remote_function_options).",
 				Computed:            true,
 				Attributes: map[string]schema.Attribute{
 					"connection": schema.StringAttribute{
@@ -158,14 +160,109 @@ func (d *RoutineParserDataSource) Schema(_ context.Context, _ datasource.SchemaR
 						MarkdownDescription: "Remote function endpoint URL.",
 						Computed:            true,
 					},
+					"max_batching_rows": schema.StringAttribute{
+						MarkdownDescription: "Max rows per batch sent to the remote service.",
+						Computed:            true,
+					},
+					"user_defined_context": schema.MapAttribute{
+						ElementType:         types.StringType,
+						MarkdownDescription: "User-defined context key/value pairs.",
+						Computed:            true,
+					},
 				},
 			},
 			"spark_options": schema.SingleNestedAttribute{
-				MarkdownDescription: "If language is PYTHON, JAVA, or SCALA, then it returns the Spark options of the routine.",
+				MarkdownDescription: "Spark stored procedure options when present (maps to google_bigquery_routine.spark_options).",
 				Computed:            true,
 				Attributes: map[string]schema.Attribute{
-					"raw": schema.StringAttribute{
-						MarkdownDescription: "Raw spark options JSON when present.",
+					"connection": schema.StringAttribute{
+						MarkdownDescription: "Spark connection resource name.",
+						Computed:            true,
+					},
+					"runtime_version": schema.StringAttribute{
+						MarkdownDescription: "Spark runtime version.",
+						Computed:            true,
+					},
+					"container_image": schema.StringAttribute{
+						MarkdownDescription: "Custom container image.",
+						Computed:            true,
+					},
+					"main_file_uri": schema.StringAttribute{
+						MarkdownDescription: "Main file/jar URI.",
+						Computed:            true,
+					},
+					"main_class": schema.StringAttribute{
+						MarkdownDescription: "Main class for Java/Scala.",
+						Computed:            true,
+					},
+					"py_file_uris": schema.ListAttribute{
+						ElementType:         types.StringType,
+						MarkdownDescription: "Python files on PYTHONPATH.",
+						Computed:            true,
+					},
+					"jar_uris": schema.ListAttribute{
+						ElementType:         types.StringType,
+						MarkdownDescription: "JAR URIs.",
+						Computed:            true,
+					},
+					"file_uris": schema.ListAttribute{
+						ElementType:         types.StringType,
+						MarkdownDescription: "File URIs for executors.",
+						Computed:            true,
+					},
+					"archive_uris": schema.ListAttribute{
+						ElementType:         types.StringType,
+						MarkdownDescription: "Archive URIs for executors.",
+						Computed:            true,
+					},
+					"properties": schema.MapAttribute{
+						ElementType:         types.StringType,
+						MarkdownDescription: "Spark configuration properties.",
+						Computed:            true,
+					},
+				},
+			},
+			"python_options": schema.SingleNestedAttribute{
+				MarkdownDescription: "Python UDF options when present (maps to google_bigquery_routine.python_options).",
+				Computed:            true,
+				Attributes: map[string]schema.Attribute{
+					"entry_point": schema.StringAttribute{
+						MarkdownDescription: "Python entry point function name.",
+						Computed:            true,
+					},
+					"packages": schema.ListAttribute{
+						ElementType:         types.StringType,
+						MarkdownDescription: "Python packages to install.",
+						Computed:            true,
+					},
+				},
+			},
+			"external_runtime_options": schema.SingleNestedAttribute{
+				MarkdownDescription: "External runtime options for Python UDFs (maps to google_bigquery_routine.external_runtime_options).",
+				Computed:            true,
+				Attributes: map[string]schema.Attribute{
+					"container_memory": schema.StringAttribute{
+						MarkdownDescription: "Container memory (e.g. 512Mi).",
+						Computed:            true,
+					},
+					"container_cpu": schema.StringAttribute{
+						MarkdownDescription: "Container CPU amount.",
+						Computed:            true,
+					},
+					"runtime_connection": schema.StringAttribute{
+						MarkdownDescription: "Connection used to run container code.",
+						Computed:            true,
+					},
+					"max_batching_rows": schema.StringAttribute{
+						MarkdownDescription: "Max rows per batch to the external runtime.",
+						Computed:            true,
+					},
+					"runtime_version": schema.StringAttribute{
+						MarkdownDescription: "Language runtime version (e.g. python-3.11).",
+						Computed:            true,
+					},
+					"container_request_concurrency": schema.StringAttribute{
+						MarkdownDescription: "Max concurrent requests per container.",
 						Computed:            true,
 					},
 				},
@@ -249,11 +346,24 @@ func (d *RoutineParserDataSource) Read(ctx context.Context, req datasource.ReadR
 	resp.Diagnostics.Append(diags...)
 	data.Arguments = argsList
 
-	remoteType := map[string]attr.Type{"connection": types.StringType, "endpoint": types.StringType}
-	if result.RemoteConnection != "" || result.RemoteEndpoint != "" {
+	remoteType := map[string]attr.Type{
+		"connection":           types.StringType,
+		"endpoint":             types.StringType,
+		"max_batching_rows":    types.StringType,
+		"user_defined_context": types.MapType{ElemType: types.StringType},
+	}
+	if result.RemoteFunctionOptions != nil {
+		ctxMap := result.RemoteFunctionOptions.UserDefinedContext
+		if ctxMap == nil {
+			ctxMap = map[string]string{}
+		}
+		ctxVal, diags := types.MapValueFrom(ctx, types.StringType, ctxMap)
+		resp.Diagnostics.Append(diags...)
 		obj, diags := types.ObjectValue(remoteType, map[string]attr.Value{
-			"connection": stringOrNull(result.RemoteConnection),
-			"endpoint":   stringOrNull(result.RemoteEndpoint),
+			"connection":           stringOrNull(result.RemoteFunctionOptions.Connection),
+			"endpoint":             stringOrNull(result.RemoteFunctionOptions.Endpoint),
+			"max_batching_rows":    stringOrNull(result.RemoteFunctionOptions.MaxBatchingRows),
+			"user_defined_context": ctxVal,
 		})
 		resp.Diagnostics.Append(diags...)
 		data.RemoteFunctionOptions = obj
@@ -261,15 +371,89 @@ func (d *RoutineParserDataSource) Read(ctx context.Context, req datasource.ReadR
 		data.RemoteFunctionOptions = types.ObjectNull(remoteType)
 	}
 
-	sparkType := map[string]attr.Type{"raw": types.StringType}
-	if result.SparkOptionsJSON != "" {
+	sparkType := map[string]attr.Type{
+		"connection":      types.StringType,
+		"runtime_version": types.StringType,
+		"container_image": types.StringType,
+		"main_file_uri":   types.StringType,
+		"main_class":      types.StringType,
+		"py_file_uris":    types.ListType{ElemType: types.StringType},
+		"jar_uris":        types.ListType{ElemType: types.StringType},
+		"file_uris":       types.ListType{ElemType: types.StringType},
+		"archive_uris":    types.ListType{ElemType: types.StringType},
+		"properties":      types.MapType{ElemType: types.StringType},
+	}
+	if result.SparkOptions != nil {
+		props := result.SparkOptions.Properties
+		if props == nil {
+			props = map[string]string{}
+		}
+		propsVal, diags := types.MapValueFrom(ctx, types.StringType, props)
+		resp.Diagnostics.Append(diags...)
+		py, diags := types.ListValueFrom(ctx, types.StringType, result.SparkOptions.PyFileURIs)
+		resp.Diagnostics.Append(diags...)
+		jar, diags := types.ListValueFrom(ctx, types.StringType, result.SparkOptions.JarURIs)
+		resp.Diagnostics.Append(diags...)
+		files, diags := types.ListValueFrom(ctx, types.StringType, result.SparkOptions.FileURIs)
+		resp.Diagnostics.Append(diags...)
+		arch, diags := types.ListValueFrom(ctx, types.StringType, result.SparkOptions.ArchiveURIs)
+		resp.Diagnostics.Append(diags...)
 		obj, diags := types.ObjectValue(sparkType, map[string]attr.Value{
-			"raw": types.StringValue(result.SparkOptionsJSON),
+			"connection":      stringOrNull(result.SparkOptions.Connection),
+			"runtime_version": stringOrNull(result.SparkOptions.RuntimeVersion),
+			"container_image": stringOrNull(result.SparkOptions.ContainerImage),
+			"main_file_uri":   stringOrNull(result.SparkOptions.MainFileURI),
+			"main_class":      stringOrNull(result.SparkOptions.MainClass),
+			"py_file_uris":    py,
+			"jar_uris":        jar,
+			"file_uris":       files,
+			"archive_uris":    arch,
+			"properties":      propsVal,
 		})
 		resp.Diagnostics.Append(diags...)
 		data.SparkOptions = obj
 	} else {
 		data.SparkOptions = types.ObjectNull(sparkType)
+	}
+
+	pythonType := map[string]attr.Type{
+		"entry_point": types.StringType,
+		"packages":    types.ListType{ElemType: types.StringType},
+	}
+	if result.PythonOptions != nil {
+		pkgs, diags := types.ListValueFrom(ctx, types.StringType, result.PythonOptions.Packages)
+		resp.Diagnostics.Append(diags...)
+		obj, diags := types.ObjectValue(pythonType, map[string]attr.Value{
+			"entry_point": stringOrNull(result.PythonOptions.EntryPoint),
+			"packages":    pkgs,
+		})
+		resp.Diagnostics.Append(diags...)
+		data.PythonOptions = obj
+	} else {
+		data.PythonOptions = types.ObjectNull(pythonType)
+	}
+
+	extType := map[string]attr.Type{
+		"container_memory":              types.StringType,
+		"container_cpu":                 types.StringType,
+		"runtime_connection":            types.StringType,
+		"max_batching_rows":             types.StringType,
+		"runtime_version":               types.StringType,
+		"container_request_concurrency": types.StringType,
+	}
+	if result.ExternalRuntimeOptions != nil {
+		obj, diags := types.ObjectValue(extType, map[string]attr.Value{
+			"container_memory":              stringOrNull(result.ExternalRuntimeOptions.ContainerMemory),
+			"container_cpu":                 stringOrNull(result.ExternalRuntimeOptions.ContainerCPU),
+			"runtime_connection":            stringOrNull(result.ExternalRuntimeOptions.RuntimeConnection),
+			"max_batching_rows":             stringOrNull(result.ExternalRuntimeOptions.MaxBatchingRows),
+			"runtime_version":               stringOrNull(result.ExternalRuntimeOptions.RuntimeVersion),
+			"container_request_concurrency": stringOrNull(result.ExternalRuntimeOptions.ContainerRequestConcurrency),
+		})
+		resp.Diagnostics.Append(diags...)
+		data.ExternalRuntimeOptions = obj
+	} else {
+		data.ExternalRuntimeOptions = types.ObjectNull(extType)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

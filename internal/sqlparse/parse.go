@@ -278,11 +278,7 @@ func (p *parser) parseRoutineRest(res *ParseResult) (*ParseResult, error) {
 				if err != nil {
 					return nil, err
 				}
-				var cols []ColumnDef
-				for _, f := range fields {
-					cols = append(cols, ColumnDef{Name: f.Name})
-				}
-				js, err := tableTypeToJSON(cols)
+				js, err := tableTypeToJSON(fields)
 				if err != nil {
 					return nil, err
 				}
@@ -301,74 +297,138 @@ func (p *parser) parseRoutineRest(res *ParseResult) (*ParseResult, error) {
 		}
 	}
 
-	// LANGUAGE
-	if p.peek().kind == tokLanguage {
-		p.next()
-		t := p.next()
-		lang := strings.ToUpper(t.lit)
-		switch lang {
-		case "JS", "JAVASCRIPT":
-			res.Language = "JAVASCRIPT"
-		case "SQL", "PYTHON", "JAVA", "SCALA":
-			res.Language = lang
+	// Trailing clauses in flexible order: LANGUAGE, (REMOTE)? WITH CONNECTION, OPTIONS, AS/BEGIN body.
+	bodySeen := false
+	for {
+		switch p.peek().kind {
+		case tokLanguage:
+			p.next()
+			t := p.next()
+			lang := strings.ToUpper(t.lit)
+			switch lang {
+			case "JS", "JAVASCRIPT":
+				res.Language = "JAVASCRIPT"
+			case "SQL", "PYTHON", "JAVA", "SCALA":
+				res.Language = lang
+			default:
+				res.Language = lang
+			}
+		case tokRemote:
+			p.next()
+			if _, err := p.expect(tokWith, "WITH"); err != nil {
+				return nil, err
+			}
+			if _, err := p.expect(tokConnection, "CONNECTION"); err != nil {
+				return nil, err
+			}
+			conn, err := p.parseQualifiedName()
+			if err != nil {
+				return nil, err
+			}
+			res.RemoteConnection = conn
+			res.ensureRemote().Connection = conn
+		case tokWith:
+			p.next()
+			if _, err := p.expect(tokConnection, "CONNECTION"); err != nil {
+				return nil, err
+			}
+			conn, err := p.parseQualifiedName()
+			if err != nil {
+				return nil, err
+			}
+			// Spark procedures vs Python UDF connection targets.
+			if res.Kind == KindProcedure || (res.SparkOptions != nil && (res.SparkOptions.MainFileURI != "" || res.SparkOptions.RuntimeVersion != "")) {
+				res.ensureSpark().Connection = conn
+			} else if res.Language == "PYTHON" {
+				res.ensureExternalRuntime().RuntimeConnection = conn
+			} else {
+				// Default: stash on both until OPTIONS engine clarifies.
+				res.ensureSpark().Connection = conn
+				res.ensureExternalRuntime().RuntimeConnection = conn
+			}
+			res.RemoteConnection = conn
+		case tokOptions:
+			if err := p.parseOptions(res); err != nil {
+				return nil, err
+			}
+		case tokAs:
+			asTok := p.next()
+			body, _, cerr := captureBody(p.input, asTok.offset+len(asTok.lit))
+			if cerr != nil {
+				return nil, cerr
+			}
+			res.DefinitionBody = body
+			bodySeen = true
+			goto doneClauses
+		case tokBegin:
+			beginTok := p.peek()
+			body, _, cerr := captureBody(p.input, beginTok.offset)
+			if cerr != nil {
+				return nil, cerr
+			}
+			res.DefinitionBody = body
+			bodySeen = true
+			goto doneClauses
+		case tokEOF, tokSemi:
+			goto doneClauses
 		default:
-			res.Language = lang
+			goto doneClauses
 		}
 	}
-
-	// REMOTE WITH CONNECTION ...
-	if p.peek().kind == tokRemote {
-		p.next()
-		if _, err := p.expect(tokWith, "WITH"); err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(tokConnection, "CONNECTION"); err != nil {
-			return nil, err
-		}
-		conn, err := p.parseQualifiedName()
-		if err != nil {
-			return nil, err
-		}
-		res.RemoteConnection = conn
-	}
-
-	// OPTIONS (...)
-	if p.peek().kind == tokOptions {
-		if err := p.parseOptions(res); err != nil {
-			return nil, err
-		}
-	}
-
-	// Body: AS <expr|BEGIN…END|string> or procedure-style BEGIN…END without AS.
-	var body string
-	var cerr *ParseError
-	switch p.peek().kind {
-	case tokAs:
-		asTok := p.next()
-		body, _, cerr = captureBody(p.input, asTok.offset+len(asTok.lit))
-	case tokBegin:
-		beginTok := p.peek()
-		body, _, cerr = captureBody(p.input, beginTok.offset)
-	default:
+doneClauses:
+	if !bodySeen && !routineBodyOptional(res) {
 		t := p.peek()
 		return nil, &ParseError{Message: "expected AS or BEGIN", Line: t.line, Column: t.col, Offset: t.offset}
 	}
-	if cerr != nil {
-		return nil, cerr
-	}
-	res.DefinitionBody = body
 	if res.Language == "" {
 		res.Language = "SQL"
 	}
+	finalizeRoutineOptions(res)
+	return res, nil
+}
 
-	if res.RemoteConnection != "" || res.RemoteEndpoint != "" {
+func routineBodyOptional(res *ParseResult) bool {
+	if res.RemoteEndpoint != "" {
+		return true
+	}
+	if res.RemoteFunctionOptions != nil && res.RemoteFunctionOptions.Endpoint != "" {
+		return true
+	}
+	// REMOTE WITH CONNECTION … OPTIONS without AS body
+	if res.RemoteFunctionOptions != nil && res.RemoteFunctionOptions.Connection != "" && res.Language == "" {
+		return true
+	}
+	if res.SparkOptions != nil && res.SparkOptions.MainFileURI != "" {
+		return true
+	}
+	return false
+}
+
+func finalizeRoutineOptions(res *ParseResult) {
+	if res.RemoteFunctionOptions != nil {
+		if res.RemoteFunctionOptions.Connection == "" && res.RemoteConnection != "" {
+			res.RemoteFunctionOptions.Connection = res.RemoteConnection
+		}
+		if res.RemoteFunctionOptions.Endpoint == "" && res.RemoteEndpoint != "" {
+			res.RemoteFunctionOptions.Endpoint = res.RemoteEndpoint
+		}
+		res.RemoteConnection = res.RemoteFunctionOptions.Connection
+		res.RemoteEndpoint = res.RemoteFunctionOptions.Endpoint
+		res.RemoteFunctionOptionsJSON = fmt.Sprintf(
+			`{"connection":%q,"endpoint":%q}`,
+			res.RemoteFunctionOptions.Connection, res.RemoteFunctionOptions.Endpoint,
+		)
+	} else if res.RemoteConnection != "" || res.RemoteEndpoint != "" {
+		res.ensureRemote().Connection = res.RemoteConnection
+		res.ensureRemote().Endpoint = res.RemoteEndpoint
 		res.RemoteFunctionOptionsJSON = fmt.Sprintf(
 			`{"connection":%q,"endpoint":%q}`,
 			res.RemoteConnection, res.RemoteEndpoint,
 		)
 	}
-
-	return res, nil
+	if res.SparkOptions != nil && res.SparkOptions.Connection == "" && res.RemoteConnection != "" && res.Kind == KindProcedure {
+		res.SparkOptions.Connection = res.RemoteConnection
+	}
 }
 
 func (p *parser) parseViewRest(res *ParseResult) (*ParseResult, error) {
@@ -570,17 +630,15 @@ func (p *parser) parseArgument() (Argument, error) {
 	upper := strings.ToUpper(strings.TrimSpace(typeStr))
 	if strings.HasPrefix(upper, "TABLE") {
 		inner := extractAngleContents(typeStr)
-		var cols []ColumnDef
+		var fields []structField
 		if inner != "" {
-			fields, err := parseStructFields(inner)
+			var err error
+			fields, err = parseStructFields(inner)
 			if err != nil {
 				return arg, err
 			}
-			for _, f := range fields {
-				cols = append(cols, ColumnDef{Name: f.Name})
-			}
 		}
-		js, err := tableArgTypeJSON(cols)
+		js, err := tableArgTypeJSON(fields)
 		if err != nil {
 			return arg, err
 		}
@@ -725,14 +783,67 @@ func (p *parser) parseOptions(res *ParseResult) error {
 		case "friendly_name":
 			res.FriendlyName = v
 		case "library", "libraries":
-			// single or already joined
-			res.ImportedLibraries = append(res.ImportedLibraries, v)
+			res.ImportedLibraries = append(res.ImportedLibraries, parseStringListOption(v)...)
 		case "determinism_level":
 			res.DeterminismLevel = strings.ToUpper(v)
 		case "data_governance_type":
 			res.DataGovernanceType = strings.ToUpper(v)
 		case "endpoint":
 			res.RemoteEndpoint = v
+			res.ensureRemote().Endpoint = v
+		case "user_defined_context":
+			res.ensureRemote().UserDefinedContext = parseLabelsLiteral(v)
+		case "max_batching_rows":
+			if res.Language == "PYTHON" || (res.PythonOptions != nil && res.PythonOptions.EntryPoint != "") {
+				res.ensureExternalRuntime().MaxBatchingRows = trimOptionQuotes(v)
+			} else {
+				res.ensureRemote().MaxBatchingRows = trimOptionQuotes(v)
+			}
+		case "entry_point":
+			res.ensurePython().EntryPoint = trimOptionQuotes(v)
+		case "packages":
+			res.ensurePython().Packages = parseStringListOption(v)
+		case "runtime_version":
+			vv := trimOptionQuotes(v)
+			if res.Kind == KindProcedure || strings.HasPrefix(strings.ToLower(vv), "python-") && res.Language != "PYTHON" && mHasEngineSpark(m) {
+				res.ensureSpark().RuntimeVersion = vv
+			} else if res.Kind == KindProcedure || mHasEngineSpark(m) {
+				res.ensureSpark().RuntimeVersion = vv
+			} else {
+				res.ensureExternalRuntime().RuntimeVersion = vv
+			}
+			// Also set based on language when known.
+			if res.Language == "PYTHON" && res.Kind != KindProcedure {
+				res.ensureExternalRuntime().RuntimeVersion = vv
+			}
+			if res.Kind == KindProcedure {
+				res.ensureSpark().RuntimeVersion = vv
+			}
+		case "container_memory":
+			res.ensureExternalRuntime().ContainerMemory = trimOptionQuotes(v)
+		case "container_cpu":
+			res.ensureExternalRuntime().ContainerCPU = trimOptionQuotes(v)
+		case "container_request_concurrency":
+			res.ensureExternalRuntime().ContainerRequestConcurrency = trimOptionQuotes(v)
+		case "main_file_uri":
+			res.ensureSpark().MainFileURI = trimOptionQuotes(v)
+		case "main_class":
+			res.ensureSpark().MainClass = trimOptionQuotes(v)
+		case "container_image":
+			res.ensureSpark().ContainerImage = trimOptionQuotes(v)
+		case "py_file_uris":
+			res.ensureSpark().PyFileURIs = parseStringListOption(v)
+		case "jar_uris":
+			res.ensureSpark().JarURIs = parseStringListOption(v)
+		case "file_uris":
+			res.ensureSpark().FileURIs = parseStringListOption(v)
+		case "archive_uris":
+			res.ensureSpark().ArchiveURIs = parseStringListOption(v)
+		case "properties":
+			res.ensureSpark().Properties = parseLabelsLiteral(v)
+		case "engine":
+			// Spark DDL marker; connection already captured via WITH CONNECTION.
+			_ = v
 		case "enable_refresh":
 			b := strings.EqualFold(v, "true") || v == "TRUE"
 			res.EnableRefresh = &b
@@ -750,13 +861,53 @@ func (p *parser) parseOptions(res *ParseResult) error {
 		case "kms_key_name":
 			res.KmsKeyName = v
 		case "labels":
-			// parse [("k","v"), ...]
 			res.Labels = parseLabelsLiteral(v)
 		default:
 			// ignore unmappable e.g. retain_partitions
 		}
 	}
 	return nil
+}
+
+func mHasEngineSpark(m map[string]string) bool {
+	for k, v := range m {
+		if strings.EqualFold(k, "engine") && strings.EqualFold(trimOptionQuotes(v), "SPARK") {
+			return true
+		}
+	}
+	return false
+}
+
+func trimOptionQuotes(v string) string {
+	v = strings.TrimSpace(v)
+	if len(v) >= 2 {
+		if (v[0] == '"' && v[len(v)-1] == '"') || (v[0] == '\'' && v[len(v)-1] == '\'') {
+			return v[1 : len(v)-1]
+		}
+	}
+	return v
+}
+
+// parseStringListOption parses ['a','b'] or "a" into a string slice.
+func parseStringListOption(v string) []string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return nil
+	}
+	if strings.HasPrefix(v, "[") {
+		inner := strings.TrimSuffix(strings.TrimPrefix(v, "["), "]")
+		parts := splitTopLevel(inner, ',')
+		var out []string
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			out = append(out, trimOptionQuotes(p))
+		}
+		return out
+	}
+	return []string{trimOptionQuotes(v)}
 }
 
 func (p *parser) parseOptionsMap() (map[string]string, error) {
