@@ -521,22 +521,26 @@ func captureBody(input string, startOffset int) (body string, endOffset int, err
 		return "", i, &ParseError{Message: "unterminated body parentheses", Line: line, Column: col, Offset: start}
 	}
 
-	// Raw / triple string body
-	if (input[i] == 'r' || input[i] == 'R') && i+4 < len(input) {
-		rest := input[i+1:]
-		if strings.HasPrefix(rest, "\"\"\"") || strings.HasPrefix(rest, "'''") {
-			quote := rest[:3]
-			i += 1 + 3
-			start := i
-			for i+2 < len(input) {
-				if input[i:i+3] == quote {
-					body := input[start:i]
-					i += 3
-					return body, i, nil
+	// Raw / triple string body (r""" / r''' / R""" …), allowing whitespace after r/R.
+	if input[i] == 'r' || input[i] == 'R' {
+		j := i + 1
+		for j < len(input) && (input[j] == ' ' || input[j] == '\t') {
+			j++
+		}
+		if j+2 < len(input) {
+			if (input[j] == '"' && input[j+1] == '"' && input[j+2] == '"') ||
+				(input[j] == '\'' && input[j+1] == '\'' && input[j+2] == '\'') {
+				quote := input[j : j+3]
+				j += 3
+				start := j
+				for j+2 < len(input) {
+					if input[j:j+3] == quote {
+						return input[start:j], j + 3, nil
+					}
+					j++
 				}
-				i++
+				return "", j, &ParseError{Message: "unterminated raw string body", Line: line, Column: col, Offset: startOffset}
 			}
-			return "", i, &ParseError{Message: "unterminated raw string body", Line: line, Column: col, Offset: startOffset}
 		}
 	}
 	if i+2 < len(input) {
