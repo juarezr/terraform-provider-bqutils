@@ -558,37 +558,85 @@ func captureBody(input string, startOffset int) (body string, endOffset int, err
 		}
 	}
 
-	// BEGIN ... END
+	// BEGIN ... END — skip strings/comments so END inside them is not a terminator.
 	upper := strings.ToUpper(input[i:])
 	if strings.HasPrefix(upper, "BEGIN") {
 		start := i
 		depth := 0
 		for i < len(input) {
-			// skip comments/strings roughly via scanning words
-			for i < len(input) && unicode.IsSpace(rune(input[i])) {
+			c := input[i]
+			if c == '\'' || c == '"' {
+				if i+2 < len(input) && input[i+1] == c && input[i+2] == c {
+					q := c
+					i += 3
+					for i+2 < len(input) {
+						if input[i] == q && input[i+1] == q && input[i+2] == q {
+							i += 3
+							break
+						}
+						i++
+					}
+					continue
+				}
+				q := c
 				i++
+				for i < len(input) {
+					if input[i] == '\\' && i+1 < len(input) {
+						i += 2
+						continue
+					}
+					if input[i] == q {
+						i++
+						break
+					}
+					i++
+				}
+				continue
 			}
-			if i >= len(input) {
-				break
+			if c == '`' {
+				i++
+				for i < len(input) && input[i] != '`' {
+					i++
+				}
+				if i < len(input) {
+					i++
+				}
+				continue
 			}
-			if input[i] == '-' && i+1 < len(input) && input[i+1] == '-' {
+			if c == '-' && i+1 < len(input) && input[i+1] == '-' {
+				i += 2
 				for i < len(input) && input[i] != '\n' {
 					i++
 				}
 				continue
 			}
-			wordStart := i
-			for i < len(input) && (unicode.IsLetter(rune(input[i])) || input[i] == '_') {
-				i++
+			if c == '/' && i+1 < len(input) && input[i+1] == '*' {
+				i += 2
+				for i+1 < len(input) && !(input[i] == '*' && input[i+1] == '/') {
+					i++
+				}
+				if i+1 < len(input) {
+					i += 2
+				}
+				continue
 			}
-			if i > wordStart {
+			if isIdentStart(rune(c)) {
+				wordStart := i
+				r, size := utf8.DecodeRuneInString(input[i:])
+				i += size
+				for i < len(input) {
+					r, size = utf8.DecodeRuneInString(input[i:])
+					if !isIdentPart(r) {
+						break
+					}
+					i += size
+				}
 				w := strings.ToUpper(input[wordStart:i])
 				if w == "BEGIN" {
 					depth++
 				} else if w == "END" {
 					depth--
 					if depth == 0 {
-						// optional ;
 						j := i
 						for j < len(input) && unicode.IsSpace(rune(input[j])) {
 							j++
