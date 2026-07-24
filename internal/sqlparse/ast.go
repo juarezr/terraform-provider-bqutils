@@ -107,12 +107,6 @@ type ParseResult struct {
 	PythonOptions          *PythonOptions
 	ExternalRuntimeOptions *ExternalRuntimeOptions
 	RemoteFunctionOptions  *RemoteFunctionOptions
-
-	// Legacy aliases filled for compatibility with older provider wiring.
-	SparkOptionsJSON          string
-	RemoteFunctionOptionsJSON string
-	RemoteConnection          string
-	RemoteEndpoint            string
 }
 
 // ParseError is a positioned parse failure.

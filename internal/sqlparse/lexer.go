@@ -13,7 +13,6 @@ const (
 	tokString
 	tokNumber
 	tokRawString // r"""...""" body-like
-	tokBody      // captured AS body
 	tokCreate
 	tokOr
 	tokReplace
@@ -73,7 +72,6 @@ type lexer struct {
 	pos    int
 	line   int
 	col    int
-	start  int
 	tokens []token
 	idx    int
 	err    *ParseError

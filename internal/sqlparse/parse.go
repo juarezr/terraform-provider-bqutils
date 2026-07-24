@@ -325,7 +325,6 @@ func (p *parser) parseRoutineRest(res *ParseResult) (*ParseResult, error) {
 			if err != nil {
 				return nil, err
 			}
-			res.RemoteConnection = conn
 			res.ensureRemote().Connection = conn
 		case tokWith:
 			p.next()
@@ -346,7 +345,6 @@ func (p *parser) parseRoutineRest(res *ParseResult) (*ParseResult, error) {
 				res.ensureSpark().Connection = conn
 				res.ensureExternalRuntime().RuntimeConnection = conn
 			}
-			res.RemoteConnection = conn
 		case tokOptions:
 			if err := p.parseOptions(res); err != nil {
 				return nil, err
@@ -383,14 +381,10 @@ doneClauses:
 	if res.Language == "" {
 		res.Language = "SQL"
 	}
-	finalizeRoutineOptions(res)
 	return res, nil
 }
 
 func routineBodyOptional(res *ParseResult) bool {
-	if res.RemoteEndpoint != "" {
-		return true
-	}
 	if res.RemoteFunctionOptions != nil && res.RemoteFunctionOptions.Endpoint != "" {
 		return true
 	}
@@ -402,33 +396,6 @@ func routineBodyOptional(res *ParseResult) bool {
 		return true
 	}
 	return false
-}
-
-func finalizeRoutineOptions(res *ParseResult) {
-	if res.RemoteFunctionOptions != nil {
-		if res.RemoteFunctionOptions.Connection == "" && res.RemoteConnection != "" {
-			res.RemoteFunctionOptions.Connection = res.RemoteConnection
-		}
-		if res.RemoteFunctionOptions.Endpoint == "" && res.RemoteEndpoint != "" {
-			res.RemoteFunctionOptions.Endpoint = res.RemoteEndpoint
-		}
-		res.RemoteConnection = res.RemoteFunctionOptions.Connection
-		res.RemoteEndpoint = res.RemoteFunctionOptions.Endpoint
-		res.RemoteFunctionOptionsJSON = fmt.Sprintf(
-			`{"connection":%q,"endpoint":%q}`,
-			res.RemoteFunctionOptions.Connection, res.RemoteFunctionOptions.Endpoint,
-		)
-	} else if res.RemoteConnection != "" || res.RemoteEndpoint != "" {
-		res.ensureRemote().Connection = res.RemoteConnection
-		res.ensureRemote().Endpoint = res.RemoteEndpoint
-		res.RemoteFunctionOptionsJSON = fmt.Sprintf(
-			`{"connection":%q,"endpoint":%q}`,
-			res.RemoteConnection, res.RemoteEndpoint,
-		)
-	}
-	if res.SparkOptions != nil && res.SparkOptions.Connection == "" && res.RemoteConnection != "" && res.Kind == KindProcedure {
-		res.SparkOptions.Connection = res.RemoteConnection
-	}
 }
 
 func (p *parser) parseViewRest(res *ParseResult) (*ParseResult, error) {
@@ -789,7 +756,6 @@ func (p *parser) parseOptions(res *ParseResult) error {
 		case "data_governance_type":
 			res.DataGovernanceType = strings.ToUpper(v)
 		case "endpoint":
-			res.RemoteEndpoint = v
 			res.ensureRemote().Endpoint = v
 		case "user_defined_context":
 			res.ensureRemote().UserDefinedContext = parseLabelsLiteral(v)
