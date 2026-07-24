@@ -326,3 +326,182 @@ func TestTypeJSON(t *testing.T) {
 		t.Fatalf("%s", js)
 	}
 }
+
+func TestParseSampleSimpleFunction1(t *testing.T) {
+	sql := `CREATE FUNCTION mydataset.addFourAndDivideAny(x ANY TYPE, y ANY TYPE)
+AS (
+  (x + 4) / y
+);
+
+-- SELECT
+--   addFourAndDivideAny(3, 4) AS integer_input,
+--   addFourAndDivideAny(1.59, 3.14) AS floating_point_input;
+`
+	res, err := ParseRoutine(sql, Options{TrimBody: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Kind != KindScalarFunction {
+		t.Fatalf("kind=%s", res.Kind)
+	}
+	if res.DatasetID != "mydataset" || res.ObjectID != "addFourAndDivideAny" {
+		t.Fatalf("name=%s.%s", res.DatasetID, res.ObjectID)
+	}
+	if len(res.Arguments) != 2 {
+		t.Fatalf("args=%+v", res.Arguments)
+	}
+	if res.Arguments[0].ArgumentKind != "ANY_TYPE" || res.Arguments[1].ArgumentKind != "ANY_TYPE" {
+		t.Fatalf("args=%+v", res.Arguments)
+	}
+	if !strings.Contains(res.DefinitionBody, "(x + 4) / y") {
+		t.Fatalf("body=%q", res.DefinitionBody)
+	}
+}
+
+func TestParseSampleSimpleFunction2(t *testing.T) {
+	sql := `CREATE FUNCTION mydataset.countUserByAge(userAge INT64)
+AS (
+  (SELECT COUNT(1) FROM users WHERE age = userAge)
+);
+`
+	res, err := ParseRoutine(sql, Options{TrimBody: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Kind != KindScalarFunction {
+		t.Fatalf("kind=%s", res.Kind)
+	}
+	if res.DatasetID != "mydataset" || res.ObjectID != "countUserByAge" {
+		t.Fatalf("name=%s.%s", res.DatasetID, res.ObjectID)
+	}
+	if len(res.Arguments) != 1 || res.Arguments[0].Name != "userAge" {
+		t.Fatalf("args=%+v", res.Arguments)
+	}
+	if !strings.Contains(res.DefinitionBody, "COUNT(1)") {
+		t.Fatalf("body=%q", res.DefinitionBody)
+	}
+}
+
+func TestParseSampleTempFunction(t *testing.T) {
+	sql := `CREATE TEMP FUNCTION mydataset.AddFourAndDivide(x INT64, y INT64)
+RETURNS FLOAT64
+AS (
+  (x + 4) / y
+);`
+	_, err := ParseRoutine(sql, Options{TrimBody: true})
+	if err == nil {
+		t.Fatal("expected TEMP error")
+	}
+	if !strings.Contains(err.Error(), "TEMP") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestParseSampleFunctionTable(t *testing.T) {
+	sql := `CREATE OR REPLACE TABLE FUNCTION mydataset.filter_and_sum (
+    vehicle_trips TABLE<
+        plate STRING,
+        starttime TIMESTAMP,
+        timemoving INT64,
+        distance INT64
+        >,
+    started TIMESTAMP,
+    finished TIMESTAMP,
+    vehicle_plate STRING
+) AS (
+    SELECT
+        plate,
+        DATE(starttime) AS localdate,
+        SUM(timemoving) AS total_time,
+        SUM(distance) AS total_distance,
+    FROM mydataset.vehicle_trips AS i
+    WHERE i.plate = vehicle_plate -- must be non nullable
+      AND i.starttime BETWEEN started and finished
+    GROUP BY plate, localdate
+);
+`
+	res, err := ParseRoutine(sql, Options{TrimBody: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Kind != KindTableFunction {
+		t.Fatalf("kind=%s", res.Kind)
+	}
+	if res.DatasetID != "mydataset" || res.ObjectID != "filter_and_sum" {
+		t.Fatalf("name=%s.%s", res.DatasetID, res.ObjectID)
+	}
+	if len(res.Arguments) != 4 {
+		t.Fatalf("args=%+v", res.Arguments)
+	}
+	if res.Arguments[0].Name != "vehicle_trips" {
+		t.Fatalf("arg0=%+v", res.Arguments[0])
+	}
+	dtype := res.Arguments[0].DataTypeJSON
+	if !strings.Contains(dtype, `"typeKind":"TABLE"`) || !strings.Contains(dtype, `"name":"plate"`) {
+		t.Fatalf("vehicle_trips dtype=%s", dtype)
+	}
+	if !strings.Contains(dtype, `"typeKind":"TIMESTAMP"`) || !strings.Contains(dtype, `"typeKind":"INT64"`) {
+		t.Fatalf("expected TIMESTAMP/INT64 columns in TABLE arg: %s", dtype)
+	}
+	if !strings.Contains(res.DefinitionBody, "GROUP BY plate, localdate") {
+		t.Fatalf("body=%q", res.DefinitionBody)
+	}
+}
+
+func TestParseSampleProcedure1(t *testing.T) {
+	sql := `CREATE OR REPLACE PROCEDURE mydataset.create_customer1(name STRING)
+BEGIN
+  DECLARE id STRING;
+  SET id = GENERATE_UUID();
+  INSERT INTO mydataset.customers (customer_id, name)
+    VALUES(id, name);
+  SELECT FORMAT("Created customer %s (%s)", id, name);
+END
+`
+	res, err := ParseRoutine(sql, Options{TrimBody: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Kind != KindProcedure {
+		t.Fatalf("kind=%s", res.Kind)
+	}
+	if res.DatasetID != "mydataset" || res.ObjectID != "create_customer1" {
+		t.Fatalf("name=%s.%s", res.DatasetID, res.ObjectID)
+	}
+	if len(res.Arguments) != 1 || res.Arguments[0].Name != "name" {
+		t.Fatalf("args=%+v", res.Arguments)
+	}
+	if !strings.Contains(res.DefinitionBody, "GENERATE_UUID") {
+		t.Fatalf("body=%q", res.DefinitionBody)
+	}
+}
+
+func TestParseSampleProcedure2(t *testing.T) {
+	sql := `CREATE OR REPLACE PROCEDURE mydataset.create_customer(name STRING, OUT id STRING)
+BEGIN
+  SET id = GENERATE_UUID();
+  INSERT INTO mydataset.customers (customer_id, name)
+    VALUES(id, name);
+  SELECT FORMAT("Created customer %s (%s)", id, name);
+END
+`
+	res, err := ParseRoutine(sql, Options{TrimBody: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Kind != KindProcedure {
+		t.Fatalf("kind=%s", res.Kind)
+	}
+	if res.ObjectID != "create_customer" {
+		t.Fatalf("id=%s", res.ObjectID)
+	}
+	if len(res.Arguments) != 2 {
+		t.Fatalf("args=%+v", res.Arguments)
+	}
+	if res.Arguments[1].Name != "id" || res.Arguments[1].Mode != "OUT" {
+		t.Fatalf("args=%+v", res.Arguments)
+	}
+	if !strings.Contains(res.DefinitionBody, "INSERT INTO mydataset.customers") {
+		t.Fatalf("body=%q", res.DefinitionBody)
+	}
+}

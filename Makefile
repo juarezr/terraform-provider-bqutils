@@ -39,6 +39,7 @@ coverage-report:
 	go tool cover -func=cover.out -o coverage.log
 	echo "$${COVERAGE_REPORT_TEXT}" > coverage.md
 	cat coverage.log | sed -E -e 's/^total/total:average/' -e 's/[:\t]+/ | /g' -e 's/.*/| & |/' >> coverage.md
+	tail -n 1 coverage.log | tr -d '\t'
 
 .PHONY: fmt
 fmt:

@@ -13,7 +13,6 @@ const (
 	tokString
 	tokNumber
 	tokRawString // r"""...""" body-like
-	tokBody      // captured AS body
 	tokCreate
 	tokOr
 	tokReplace
@@ -73,7 +72,6 @@ type lexer struct {
 	pos    int
 	line   int
 	col    int
-	start  int
 	tokens []token
 	idx    int
 	err    *ParseError
@@ -521,22 +519,26 @@ func captureBody(input string, startOffset int) (body string, endOffset int, err
 		return "", i, &ParseError{Message: "unterminated body parentheses", Line: line, Column: col, Offset: start}
 	}
 
-	// Raw / triple string body
-	if (input[i] == 'r' || input[i] == 'R') && i+4 < len(input) {
-		rest := input[i+1:]
-		if strings.HasPrefix(rest, "\"\"\"") || strings.HasPrefix(rest, "'''") {
-			quote := rest[:3]
-			i += 1 + 3
-			start := i
-			for i+2 < len(input) {
-				if input[i:i+3] == quote {
-					body := input[start:i]
-					i += 3
-					return body, i, nil
+	// Raw / triple string body (r""" / r''' / R""" …), allowing whitespace after r/R.
+	if input[i] == 'r' || input[i] == 'R' {
+		j := i + 1
+		for j < len(input) && (input[j] == ' ' || input[j] == '\t') {
+			j++
+		}
+		if j+2 < len(input) {
+			if (input[j] == '"' && input[j+1] == '"' && input[j+2] == '"') ||
+				(input[j] == '\'' && input[j+1] == '\'' && input[j+2] == '\'') {
+				quote := input[j : j+3]
+				j += 3
+				start := j
+				for j+2 < len(input) {
+					if input[j:j+3] == quote {
+						return input[start:j], j + 3, nil
+					}
+					j++
 				}
-				i++
+				return "", j, &ParseError{Message: "unterminated raw string body", Line: line, Column: col, Offset: startOffset}
 			}
-			return "", i, &ParseError{Message: "unterminated raw string body", Line: line, Column: col, Offset: startOffset}
 		}
 	}
 	if i+2 < len(input) {
@@ -556,37 +558,85 @@ func captureBody(input string, startOffset int) (body string, endOffset int, err
 		}
 	}
 
-	// BEGIN ... END
+	// BEGIN ... END — skip strings/comments so END inside them is not a terminator.
 	upper := strings.ToUpper(input[i:])
 	if strings.HasPrefix(upper, "BEGIN") {
 		start := i
 		depth := 0
 		for i < len(input) {
-			// skip comments/strings roughly via scanning words
-			for i < len(input) && unicode.IsSpace(rune(input[i])) {
+			c := input[i]
+			if c == '\'' || c == '"' {
+				if i+2 < len(input) && input[i+1] == c && input[i+2] == c {
+					q := c
+					i += 3
+					for i+2 < len(input) {
+						if input[i] == q && input[i+1] == q && input[i+2] == q {
+							i += 3
+							break
+						}
+						i++
+					}
+					continue
+				}
+				q := c
 				i++
+				for i < len(input) {
+					if input[i] == '\\' && i+1 < len(input) {
+						i += 2
+						continue
+					}
+					if input[i] == q {
+						i++
+						break
+					}
+					i++
+				}
+				continue
 			}
-			if i >= len(input) {
-				break
+			if c == '`' {
+				i++
+				for i < len(input) && input[i] != '`' {
+					i++
+				}
+				if i < len(input) {
+					i++
+				}
+				continue
 			}
-			if input[i] == '-' && i+1 < len(input) && input[i+1] == '-' {
+			if c == '-' && i+1 < len(input) && input[i+1] == '-' {
+				i += 2
 				for i < len(input) && input[i] != '\n' {
 					i++
 				}
 				continue
 			}
-			wordStart := i
-			for i < len(input) && (unicode.IsLetter(rune(input[i])) || input[i] == '_') {
-				i++
+			if c == '/' && i+1 < len(input) && input[i+1] == '*' {
+				i += 2
+				for i+1 < len(input) && !(input[i] == '*' && input[i+1] == '/') {
+					i++
+				}
+				if i+1 < len(input) {
+					i += 2
+				}
+				continue
 			}
-			if i > wordStart {
+			if isIdentStart(rune(c)) {
+				wordStart := i
+				r, size := utf8.DecodeRuneInString(input[i:])
+				i += size
+				for i < len(input) {
+					r, size = utf8.DecodeRuneInString(input[i:])
+					if !isIdentPart(r) {
+						break
+					}
+					i += size
+				}
 				w := strings.ToUpper(input[wordStart:i])
 				if w == "BEGIN" {
 					depth++
 				} else if w == "END" {
 					depth--
 					if depth == 0 {
-						// optional ;
 						j := i
 						for j < len(input) && unicode.IsSpace(rune(input[j])) {
 							j++

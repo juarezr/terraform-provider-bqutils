@@ -98,6 +98,9 @@ func ParseView(sql string, opts Options) (*ParseResult, error) {
 type parser struct {
 	lex   *lexer
 	input string
+	// pendingWithConnection holds WITH CONNECTION when LANGUAGE/kind is not
+	// yet known (OPTIONS/LANGUAGE order is flexible).
+	pendingWithConnection string
 }
 
 func (p *parser) peek() token { return p.lex.peek() }
@@ -206,7 +209,7 @@ func (p *parser) parseQualifiedName() (string, error) {
 	var parts []string
 	for {
 		t := p.peek()
-		if t.kind != tokIdent && !isKeywordToken(t.kind) {
+		if !isQualifiedNamePart(t.kind) {
 			if len(parts) == 0 {
 				return "", &ParseError{Message: "expected identifier", Line: t.line, Column: t.col, Offset: t.offset}
 			}
@@ -220,6 +223,27 @@ func (p *parser) parseQualifiedName() (string, error) {
 		p.next()
 	}
 	return strings.Join(parts, "."), nil
+}
+
+func isQualifiedNamePart(kind int) bool {
+	if kind == tokIdent {
+		return true
+	}
+	// Keywords may appear as identifiers, but must not absorb trailing clauses
+	// (e.g. WITH CONNECTION x.y LANGUAGE python).
+	if isNameClauseTerminator(kind) {
+		return false
+	}
+	return isKeywordToken(kind)
+}
+
+func isNameClauseTerminator(kind int) bool {
+	switch kind {
+	case tokLanguage, tokOptions, tokAs, tokRemote, tokWith, tokBegin, tokEnd,
+		tokReturns, tokPartition, tokCluster, tokSemi, tokEOF, tokLParen:
+		return true
+	}
+	return false
 }
 
 func isKeywordToken(kind int) bool {
@@ -278,11 +302,7 @@ func (p *parser) parseRoutineRest(res *ParseResult) (*ParseResult, error) {
 				if err != nil {
 					return nil, err
 				}
-				var cols []ColumnDef
-				for _, f := range fields {
-					cols = append(cols, ColumnDef{Name: f.Name})
-				}
-				js, err := tableTypeToJSON(cols)
+				js, err := tableTypeToJSON(fields)
 				if err != nil {
 					return nil, err
 				}
@@ -301,67 +321,106 @@ func (p *parser) parseRoutineRest(res *ParseResult) (*ParseResult, error) {
 		}
 	}
 
-	// LANGUAGE
-	if p.peek().kind == tokLanguage {
-		p.next()
-		t := p.next()
-		lang := strings.ToUpper(t.lit)
-		switch lang {
-		case "JS", "JAVASCRIPT":
-			res.Language = "JAVASCRIPT"
-		case "SQL", "PYTHON", "JAVA", "SCALA":
-			res.Language = lang
+	// Trailing clauses in flexible order: LANGUAGE, (REMOTE)? WITH CONNECTION, OPTIONS, AS/BEGIN body.
+	bodySeen := false
+	for {
+		switch p.peek().kind {
+		case tokLanguage:
+			p.next()
+			t := p.next()
+			lang := strings.ToUpper(t.lit)
+			switch lang {
+			case "JS", "JAVASCRIPT":
+				res.Language = "JAVASCRIPT"
+			case "SQL", "PYTHON", "JAVA", "SCALA":
+				res.Language = lang
+			default:
+				res.Language = lang
+			}
+		case tokRemote:
+			p.next()
+			if _, err := p.expect(tokWith, "WITH"); err != nil {
+				return nil, err
+			}
+			if _, err := p.expect(tokConnection, "CONNECTION"); err != nil {
+				return nil, err
+			}
+			conn, err := p.parseQualifiedName()
+			if err != nil {
+				return nil, err
+			}
+			res.ensureRemote().Connection = conn
+		case tokWith:
+			p.next()
+			if _, err := p.expect(tokConnection, "CONNECTION"); err != nil {
+				return nil, err
+			}
+			conn, err := p.parseQualifiedName()
+			if err != nil {
+				return nil, err
+			}
+			// Spark procedures vs Python UDF connection targets.
+			switch {
+			case res.Kind == KindProcedure:
+				res.ensureSpark().Connection = conn
+			case res.Language == "PYTHON":
+				res.ensureExternalRuntime().RuntimeConnection = conn
+			default:
+				// LANGUAGE may appear after WITH CONNECTION; defer routing.
+				p.pendingWithConnection = conn
+			}
+		case tokOptions:
+			if err := p.parseOptions(res); err != nil {
+				return nil, err
+			}
+		case tokAs:
+			asTok := p.next()
+			body, _, cerr := captureBody(p.input, asTok.offset+len(asTok.lit))
+			if cerr != nil {
+				return nil, cerr
+			}
+			res.DefinitionBody = body
+			bodySeen = true
+			goto doneClauses
+		case tokBegin:
+			beginTok := p.peek()
+			body, _, cerr := captureBody(p.input, beginTok.offset)
+			if cerr != nil {
+				return nil, cerr
+			}
+			res.DefinitionBody = body
+			bodySeen = true
+			goto doneClauses
+		case tokEOF, tokSemi:
+			goto doneClauses
 		default:
-			res.Language = lang
+			goto doneClauses
 		}
 	}
-
-	// REMOTE WITH CONNECTION ...
-	if p.peek().kind == tokRemote {
-		p.next()
-		if _, err := p.expect(tokWith, "WITH"); err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(tokConnection, "CONNECTION"); err != nil {
-			return nil, err
-		}
-		conn, err := p.parseQualifiedName()
-		if err != nil {
-			return nil, err
-		}
-		res.RemoteConnection = conn
-	}
-
-	// OPTIONS (...)
-	if p.peek().kind == tokOptions {
-		if err := p.parseOptions(res); err != nil {
-			return nil, err
-		}
-	}
-
-	// AS body
-	if p.peek().kind != tokAs {
+doneClauses:
+	if !bodySeen && !routineBodyOptional(res) {
 		t := p.peek()
-		return nil, &ParseError{Message: "expected AS", Line: t.line, Column: t.col, Offset: t.offset}
+		return nil, &ParseError{Message: "expected AS or BEGIN", Line: t.line, Column: t.col, Offset: t.offset}
 	}
-	asTok := p.next()
-	body, _, cerr := captureBody(p.input, asTok.offset+len(asTok.lit))
-	if cerr != nil {
-		return nil, cerr
-	}
-	res.DefinitionBody = body
 	if res.Language == "" {
 		res.Language = "SQL"
 	}
-
-	if res.RemoteConnection != "" || res.RemoteEndpoint != "" {
-		res.RemoteFunctionOptionsJSON = fmt.Sprintf(
-			`{"connection":%q,"endpoint":%q}`,
-			res.RemoteConnection, res.RemoteEndpoint,
-		)
-	}
-
+	finalizeRoutineClassification(res, p.pendingWithConnection)
 	return res, nil
+}
+
+func routineBodyOptional(res *ParseResult) bool {
+	if res.RemoteFunctionOptions != nil && res.RemoteFunctionOptions.Endpoint != "" {
+		return true
+	}
+	// REMOTE WITH CONNECTION … OPTIONS without AS body
+	if res.RemoteFunctionOptions != nil && res.RemoteFunctionOptions.Connection != "" && res.Language == "" {
+		return true
+	}
+	if res.SparkOptions != nil && res.SparkOptions.MainFileURI != "" {
+		return true
+	}
+	return false
 }
 
 func (p *parser) parseViewRest(res *ParseResult) (*ParseResult, error) {
@@ -563,17 +622,15 @@ func (p *parser) parseArgument() (Argument, error) {
 	upper := strings.ToUpper(strings.TrimSpace(typeStr))
 	if strings.HasPrefix(upper, "TABLE") {
 		inner := extractAngleContents(typeStr)
-		var cols []ColumnDef
+		var fields []structField
 		if inner != "" {
-			fields, err := parseStructFields(inner)
+			var err error
+			fields, err = parseStructFields(inner)
 			if err != nil {
 				return arg, err
 			}
-			for _, f := range fields {
-				cols = append(cols, ColumnDef{Name: f.Name})
-			}
 		}
-		js, err := tableArgTypeJSON(cols)
+		js, err := tableArgTypeJSON(fields)
 		if err != nil {
 			return arg, err
 		}
@@ -633,7 +690,7 @@ func (p *parser) parseTypeString() (string, error) {
 			if depthAngle == 0 && depthParen == 0 {
 				switch t.kind {
 				case tokComma, tokRParen, tokLanguage, tokOptions, tokAs, tokReturns,
-					tokRemote, tokSemi:
+					tokRemote, tokWith, tokBegin, tokSemi:
 					return strings.TrimSpace(b.String()), nil
 				}
 				// also stop before ident that starts OPTIONS etc already handled
@@ -642,7 +699,7 @@ func (p *parser) parseTypeString() (string, error) {
 					// but ARRAY<STRING> finished when angle closes. After type, next could be LANGUAGE.
 					u := strings.ToUpper(t.lit)
 					if u == "LANGUAGE" || u == "OPTIONS" || u == "AS" || u == "RETURNS" || u == "REMOTE" ||
-						u == "DETERMINISTIC" || u == "NOT" {
+						u == "WITH" || u == "BEGIN" || u == "DETERMINISTIC" || u == "NOT" {
 						return strings.TrimSpace(b.String()), nil
 					}
 					// After complete simple type, next ident means end (next argument name) when in arg list —
@@ -710,46 +767,222 @@ func (p *parser) parseOptions(res *ParseResult) error {
 	if err != nil {
 		return err
 	}
+	applyOptionsMap(res, m)
+	return nil
+}
+
+// applyOptionsMap applies OPTIONS in two passes so map iteration order cannot
+// mis-route fields that depend on sibling keys (e.g. max_batching_rows vs entry_point).
+func applyOptionsMap(res *ParseResult, m map[string]string) {
 	for k, v := range m {
 		key := strings.ToLower(k)
-		switch key {
-		case "description":
-			res.Description = v
-		case "friendly_name":
-			res.FriendlyName = v
-		case "library", "libraries":
-			// single or already joined
-			res.ImportedLibraries = append(res.ImportedLibraries, v)
-		case "determinism_level":
-			res.DeterminismLevel = strings.ToUpper(v)
-		case "data_governance_type":
-			res.DataGovernanceType = strings.ToUpper(v)
-		case "endpoint":
-			res.RemoteEndpoint = v
-		case "enable_refresh":
-			b := strings.EqualFold(v, "true") || v == "TRUE"
-			res.EnableRefresh = &b
-		case "allow_non_incremental_definition":
-			b := strings.EqualFold(v, "true") || v == "TRUE"
-			res.AllowNonIncrementalDefinition = &b
-		case "refresh_interval_minutes":
-			f, err := strconv.ParseFloat(v, 64)
-			if err == nil {
-				ms := int64(f * 60000)
-				res.RefreshIntervalMs = &ms
-			}
-		case "max_staleness":
-			res.MaxStaleness = normalizeMaxStaleness(v)
-		case "kms_key_name":
-			res.KmsKeyName = v
-		case "labels":
-			// parse [("k","v"), ...]
-			res.Labels = parseLabelsLiteral(v)
-		default:
-			// ignore unmappable e.g. retain_partitions
+		if key == "max_batching_rows" {
+			continue
+		}
+		applyOneOption(res, m, key, v)
+	}
+	if v, ok := optionValue(m, "max_batching_rows"); ok {
+		routeMaxBatchingRows(res, m, v)
+	}
+}
+
+func optionValue(m map[string]string, name string) (string, bool) {
+	for k, v := range m {
+		if strings.EqualFold(k, name) {
+			return v, true
 		}
 	}
-	return nil
+	return "", false
+}
+
+func looksLikePythonUDF(res *ParseResult, m map[string]string) bool {
+	if res.Kind == KindProcedure || mHasEngineSpark(m) {
+		return false
+	}
+	if res.Language == "PYTHON" {
+		return true
+	}
+	if res.PythonOptions != nil && res.PythonOptions.EntryPoint != "" {
+		return true
+	}
+	if _, ok := optionValue(m, "entry_point"); ok {
+		return true
+	}
+	return false
+}
+
+func routeMaxBatchingRows(res *ParseResult, m map[string]string, v string) {
+	vv := trimOptionQuotes(v)
+	if looksLikePythonUDF(res, m) {
+		res.ensureExternalRuntime().MaxBatchingRows = vv
+		return
+	}
+	res.ensureRemote().MaxBatchingRows = vv
+}
+
+func applyOneOption(res *ParseResult, m map[string]string, key, v string) {
+	switch key {
+	case "description":
+		res.Description = v
+	case "friendly_name":
+		res.FriendlyName = v
+	case "library", "libraries":
+		res.ImportedLibraries = append(res.ImportedLibraries, parseStringListOption(v)...)
+	case "determinism_level":
+		res.DeterminismLevel = strings.ToUpper(v)
+	case "data_governance_type":
+		res.DataGovernanceType = strings.ToUpper(v)
+	case "endpoint":
+		res.ensureRemote().Endpoint = v
+	case "user_defined_context":
+		res.ensureRemote().UserDefinedContext = parseLabelsLiteral(v)
+	case "entry_point":
+		res.ensurePython().EntryPoint = trimOptionQuotes(v)
+	case "packages":
+		res.ensurePython().Packages = parseStringListOption(v)
+	case "runtime_version":
+		vv := trimOptionQuotes(v)
+		if res.Kind == KindProcedure || mHasEngineSpark(m) {
+			res.ensureSpark().RuntimeVersion = vv
+		} else if res.Language == "PYTHON" || looksLikePythonUDF(res, m) {
+			res.ensureExternalRuntime().RuntimeVersion = vv
+		} else if res.Kind == KindProcedure {
+			res.ensureSpark().RuntimeVersion = vv
+		} else {
+			res.ensureExternalRuntime().RuntimeVersion = vv
+		}
+		if res.Language == "PYTHON" && res.Kind != KindProcedure {
+			res.ensureExternalRuntime().RuntimeVersion = vv
+		}
+		if res.Kind == KindProcedure {
+			res.ensureSpark().RuntimeVersion = vv
+		}
+	case "container_memory":
+		res.ensureExternalRuntime().ContainerMemory = trimOptionQuotes(v)
+	case "container_cpu":
+		res.ensureExternalRuntime().ContainerCPU = trimOptionQuotes(v)
+	case "container_request_concurrency":
+		res.ensureExternalRuntime().ContainerRequestConcurrency = trimOptionQuotes(v)
+	case "main_file_uri":
+		res.ensureSpark().MainFileURI = trimOptionQuotes(v)
+	case "main_class":
+		res.ensureSpark().MainClass = trimOptionQuotes(v)
+	case "container_image":
+		res.ensureSpark().ContainerImage = trimOptionQuotes(v)
+	case "py_file_uris":
+		res.ensureSpark().PyFileURIs = parseStringListOption(v)
+	case "jar_uris":
+		res.ensureSpark().JarURIs = parseStringListOption(v)
+	case "file_uris":
+		res.ensureSpark().FileURIs = parseStringListOption(v)
+	case "archive_uris":
+		res.ensureSpark().ArchiveURIs = parseStringListOption(v)
+	case "properties":
+		res.ensureSpark().Properties = parseLabelsLiteral(v)
+	case "engine":
+		// Spark DDL marker; connection already captured via WITH CONNECTION.
+		_ = v
+	case "enable_refresh":
+		b := strings.EqualFold(v, "true") || v == "TRUE"
+		res.EnableRefresh = &b
+	case "allow_non_incremental_definition":
+		b := strings.EqualFold(v, "true") || v == "TRUE"
+		res.AllowNonIncrementalDefinition = &b
+	case "refresh_interval_minutes":
+		f, err := strconv.ParseFloat(v, 64)
+		if err == nil {
+			ms := int64(f * 60000)
+			res.RefreshIntervalMs = &ms
+		}
+	case "max_staleness":
+		res.MaxStaleness = normalizeMaxStaleness(v)
+	case "kms_key_name":
+		res.KmsKeyName = v
+	case "labels":
+		res.Labels = parseLabelsLiteral(v)
+	default:
+		// ignore unmappable e.g. retain_partitions
+	}
+}
+
+// finalizeRoutineClassification applies deferred WITH CONNECTION routing and
+// corrects OPTIONS that were applied before LANGUAGE was known.
+func finalizeRoutineClassification(res *ParseResult, pendingConn string) {
+	if pendingConn != "" {
+		if res.Kind == KindProcedure {
+			if res.SparkOptions == nil || res.SparkOptions.Connection == "" {
+				res.ensureSpark().Connection = pendingConn
+			}
+		} else {
+			if res.ExternalRuntimeOptions == nil || res.ExternalRuntimeOptions.RuntimeConnection == "" {
+				res.ensureExternalRuntime().RuntimeConnection = pendingConn
+			}
+		}
+	}
+
+	// Non-procedures must not expose spark_options unless this is somehow a spark marker-only path.
+	if res.Kind != KindProcedure {
+		res.SparkOptions = nil
+	}
+
+	if res.Kind != KindProcedure && (res.Language == "PYTHON" || (res.PythonOptions != nil && res.PythonOptions.EntryPoint != "")) {
+		if res.RemoteFunctionOptions != nil && res.RemoteFunctionOptions.MaxBatchingRows != "" {
+			res.ensureExternalRuntime().MaxBatchingRows = res.RemoteFunctionOptions.MaxBatchingRows
+			res.RemoteFunctionOptions.MaxBatchingRows = ""
+		}
+	}
+	clearEmptyRemote(res)
+}
+
+func clearEmptyRemote(res *ParseResult) {
+	r := res.RemoteFunctionOptions
+	if r == nil {
+		return
+	}
+	if r.Endpoint == "" && r.Connection == "" && r.MaxBatchingRows == "" && len(r.UserDefinedContext) == 0 {
+		res.RemoteFunctionOptions = nil
+	}
+}
+
+func mHasEngineSpark(m map[string]string) bool {
+	for k, v := range m {
+		if strings.EqualFold(k, "engine") && strings.EqualFold(trimOptionQuotes(v), "SPARK") {
+			return true
+		}
+	}
+	return false
+}
+
+func trimOptionQuotes(v string) string {
+	v = strings.TrimSpace(v)
+	if len(v) >= 2 {
+		if (v[0] == '"' && v[len(v)-1] == '"') || (v[0] == '\'' && v[len(v)-1] == '\'') {
+			return v[1 : len(v)-1]
+		}
+	}
+	return v
+}
+
+// parseStringListOption parses ['a','b'] or "a" into a string slice.
+func parseStringListOption(v string) []string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return nil
+	}
+	if strings.HasPrefix(v, "[") {
+		inner := strings.TrimSuffix(strings.TrimPrefix(v, "["), "]")
+		parts := splitTopLevel(inner, ',')
+		var out []string
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			out = append(out, trimOptionQuotes(p))
+		}
+		return out
+	}
+	return []string{trimOptionQuotes(v)}
 }
 
 func (p *parser) parseOptionsMap() (map[string]string, error) {

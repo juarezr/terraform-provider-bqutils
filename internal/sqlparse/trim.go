@@ -2,7 +2,6 @@ package sqlparse
 
 import (
 	"strings"
-	"unicode"
 )
 
 // TrimBody removes leading/trailing whitespace and leading/trailing empty lines.
@@ -175,17 +174,4 @@ func SplitQualifiedName(name string) (project, dataset, object string) {
 	default:
 		return parts[0], parts[1], parts[len(parts)-1]
 	}
-}
-
-func boolPtr(v bool) *bool { return &v }
-
-func int64Ptr(v int64) *int64 { return &v }
-
-func isSpaceString(s string) bool {
-	for _, r := range s {
-		if !unicode.IsSpace(r) {
-			return false
-		}
-	}
-	return true
 }
