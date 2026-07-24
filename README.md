@@ -1,6 +1,6 @@
 # terraform-provider-bqutils
 
-Terraform provider automates the creation and update of BigQuery functions/procedures/views by parsing `CREATE` SQL statements stored in SQL Scripts and connecting with the resources the [`hashicorp/google`](https://registry.terraform.io/providers/hashicorp/google/latest) provider for object creation.
+[Terraform provider](https://registry.terraform.io/providers/juarezr/bqutils/latest/docs) automates the creation and update of BigQuery functions/procedures/views by parsing `CREATE` SQL statements stored in SQL Scripts and connecting with the resources the [`hashicorp/google`](https://registry.terraform.io/providers/hashicorp/google/latest) provider for object creation.
 
 ## Requirements
 
