@@ -339,13 +339,20 @@ func (p *parser) parseRoutineRest(res *ParseResult) (*ParseResult, error) {
 		}
 	}
 
-	// AS body
-	if p.peek().kind != tokAs {
+	// Body: AS <expr|BEGIN…END|string> or procedure-style BEGIN…END without AS.
+	var body string
+	var cerr *ParseError
+	switch p.peek().kind {
+	case tokAs:
+		asTok := p.next()
+		body, _, cerr = captureBody(p.input, asTok.offset+len(asTok.lit))
+	case tokBegin:
+		beginTok := p.peek()
+		body, _, cerr = captureBody(p.input, beginTok.offset)
+	default:
 		t := p.peek()
-		return nil, &ParseError{Message: "expected AS", Line: t.line, Column: t.col, Offset: t.offset}
+		return nil, &ParseError{Message: "expected AS or BEGIN", Line: t.line, Column: t.col, Offset: t.offset}
 	}
-	asTok := p.next()
-	body, _, cerr := captureBody(p.input, asTok.offset+len(asTok.lit))
 	if cerr != nil {
 		return nil, cerr
 	}
