@@ -6,4 +6,4 @@
 
 ### Publishing
 
-TBD
+- [Publishing to the Terraform Registry](howto-publish-to-registry.md)
