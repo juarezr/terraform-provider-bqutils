@@ -1,11 +1,19 @@
 # terraform-provider-bqutils
 
-[Terraform provider](https://registry.terraform.io/providers/juarezr/bqutils/latest/docs) automates the creation and update of BigQuery functions/procedures/views by parsing `CREATE` SQL statements stored in SQL Scripts and connecting with the resources the [`hashicorp/google`](https://registry.terraform.io/providers/hashicorp/google/latest) provider for object creation.
+Terraform [provider](https://registry.terraform.io/providers/juarezr/bqutils/latest/docs) that automates the creation and update of BigQuery functions/procedures/views by parsing `CREATE` SQL statements stored in SQL Scripts and connecting with the resources the [`hashicorp/google`](https://registry.terraform.io/providers/hashicorp/google/latest) provider for object creation.
 
 ## Requirements
 
-- [Terraform](https://www.terraform.io/downloads) >= 1.0
-- [Go](https://go.dev/doc/install) >= 1.22 (for building from source)
+- [Terraform](https://www.terraform.io/downloads) >= 1.0 or
+- [OpenTofu](https://opentofu.org/docs/intro/) >= 1.6
+- [hashicorp/google](https://registry.terraform.io/providers/hashicorp/google/latest) provider
+
+## Documentation
+
+- See [`examples/`](examples/) folder for usage patterns (including table functions, views, and materialized views).
+- Check the provider documentation on the:
+  - [Terraform Registry](https://registry.terraform.io/providers/juarezr/bqutils/latest/docs).
+  - [OpenTofu Registry](https://search.opentofu.org/provider/juarezr/bqutils/latest).
 
 ## Provider setup
 
@@ -14,7 +22,7 @@ terraform {
   required_providers {
     bqutils = {
       source  = "juarezr/bqutils"
-      version = "~> 0.2"
+      version = ">= 0.5"
     }
   }
 }
@@ -91,14 +99,15 @@ resource "google_bigquery_routine" "list_tables" {
 }
 ```
 
-## Documentation
-
-- See [`examples/`](examples/) folder for more patterns (including views and materialized views).
-- Check the [provider documentation](https://registry.terraform.io/providers/juarezr/bqutils/latest/docs) on the Terraform Registry.
-
 ## Building and testing
 
 Check the [guides](guides/index.md) for common tasks.
+
+### Development Requirements
+
+- [Go](https://go.dev/doc/install) >= 1.22 (for building from source)
+- make
+- Docker (for testing locally)
 
 ### Basic build and testing
 
@@ -138,17 +147,6 @@ cd -
 make uninstall
 ```
 
-## Publishing to the Terraform Registry
-
-This repository is used for development. For Registry publishing, the provider binary is expected under a repository named **`terraform-provider-bqutils`** (provider type `bqutils`).
-
-Typical flow:
-
-1. Move/push the code to `github.com/<namespace>/terraform-provider-bqutils`
-2. Create a GPG signing key and upload the public key to the Terraform Registry
-3. Tag a release (`v0.1.0`) and use GoReleaser (see `.goreleaser.yml`) via the Release GitHub Action
-4. Add the provider on [registry.terraform.io](https://registry.terraform.io/publish/provider)
-
 ## License
 
-GPL-2.0 (see [LICENSE](LICENSE)).
+MPL-2.0 (see [LICENSE](LICENSE)).
