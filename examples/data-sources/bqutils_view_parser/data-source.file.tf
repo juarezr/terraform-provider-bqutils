@@ -3,7 +3,7 @@ data "bqutils_view_parser" "my_simple_view" {
   sql = file("${path.module}/mydataset.my_simple_view.sql")
 }
 
-# Get the BigQuery dataset to create the MATERIALIZED VIEW in.
+# Get the BigQuery dataset to create the VIEW in.
 data "google_bigquery_dataset" "mydataset" {
   dataset_id = "mydataset"
 }
@@ -21,7 +21,7 @@ resource "google_bigquery_table" "my_simple_view" {
   deletion_protection = false
 
   view {
-    # The SQL query that defines the materialized view: After the AS element in SQL Syntax
+    # The SQL query that defines the view: After the AS element in SQL Syntax
     query = data.bqutils_view_parser.my_simple_view.query
 
     use_legacy_sql = false
