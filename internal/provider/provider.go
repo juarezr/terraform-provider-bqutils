@@ -2,12 +2,24 @@ package provider
 
 import (
 	"context"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 )
+
+// Provider constants and definitions.
+const (
+	providerName    string = "bqutils"
+	providerRemarks string = `Reduce the amount of work required to create, test, deploy, grant authorized access to
+datasets and manage the source code of BigQuery functions, procedures and views when
+using the Google BigQuery Terraform provider by using the same SQL script either in the
+BigQuery Console and in Terraform seamlessly.`
+)
+
+var providerDescription = strings.ReplaceAll(providerRemarks, "\n", " ")
 
 // Ensure Provider satisfies interfaces.
 var _ provider.Provider = &BqutilsProvider{}
@@ -25,13 +37,13 @@ func New(version string) func() provider.Provider {
 }
 
 func (p *BqutilsProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
-	resp.TypeName = "bqutils"
+	resp.TypeName = providerName
 	resp.Version = p.version
 }
 
 func (p *BqutilsProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "The bqutils provider automates the creation and update of BigQuery functions/procedures/views using `CREATE` SQL statements stored in files, aiming to reduce the effort required to manage the source code of these objects.",
+		MarkdownDescription: providerDescription,
 		Attributes:          map[string]schema.Attribute{},
 	}
 }

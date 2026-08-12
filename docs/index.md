@@ -1,7 +1,7 @@
 ---
 page_title: "bqutils Provider"
 description: |-
-  The bqutils provider automates the creation and update of BigQuery functions/procedures/views using `CREATE` SQL statements stored in files, aiming to reduce the effort required to manage the source code of these objects.
+  Reduce the amount of work required to create, test, deploy, grant authorized access to datasets and manage the source code of BigQuery functions, procedures and views when using the Google BigQuery Terraform provider by using the same SQL script either in the BigQuery Console and in Terraform seamlessly.
 ---
 
 # bqutils Provider
