@@ -248,6 +248,17 @@ func TestParseView(t *testing.T) {
 	}
 }
 
+func TestParseView_backtickInQuery(t *testing.T) {
+	sql := `CREATE VIEW mydataset.v AS SELECT ` + "`col`" + ` FROM ` + "`mydataset.src`" + `;`
+	res, err := ParseView(sql, Options{TrimBody: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(res.Query, "`col`") || !strings.Contains(res.Query, "`mydataset.src`") {
+		t.Fatalf("query missing backticks: %q", res.Query)
+	}
+}
+
 func TestParseMaterializedView(t *testing.T) {
 	sql := `
     CREATE OR REPLACE MATERIALIZED VIEW IF NOT EXISTS ` + "`mydataset.my_materialized_view`" + `
@@ -445,6 +456,96 @@ func TestParseSampleFunctionTable(t *testing.T) {
 	}
 	if !strings.Contains(res.DefinitionBody, "GROUP BY plate, localdate") {
 		t.Fatalf("body=%q", res.DefinitionBody)
+	}
+}
+
+func TestParseTableFunction_returnsTable(t *testing.T) {
+	sql := `CREATE OR REPLACE TABLE FUNCTION ` + "`mydataset.test_returns_table`" + `
+(
+  min_id INT64
+)
+-- Explicitly defining the structure of the returned table
+RETURNS TABLE<id INT64, eventname STRING>
+AS (
+  SELECT
+    id, COLLATE(eventname, '') AS eventname
+  FROM ` + "`mydataset.eventkind`" + ` AS e
+  WHERE
+    e.id >= min_id
+);
+`
+	res, err := ParseRoutine(sql, Options{TrimBody: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Kind != KindTableFunction {
+		t.Fatalf("kind=%s", res.Kind)
+	}
+	if res.DatasetID != "mydataset" || res.ObjectID != "test_returns_table" {
+		t.Fatalf("name=%s.%s", res.DatasetID, res.ObjectID)
+	}
+	if len(res.Arguments) != 1 || res.Arguments[0].Name != "min_id" {
+		t.Fatalf("args=%+v", res.Arguments)
+	}
+	if res.ReturnTableTypeJSON == "" {
+		t.Fatal("expected return_table_type JSON")
+	}
+	if !strings.Contains(res.ReturnTableTypeJSON, `"name":"id"`) ||
+		!strings.Contains(res.ReturnTableTypeJSON, `"name":"eventname"`) {
+		t.Fatalf("return_table_type=%s", res.ReturnTableTypeJSON)
+	}
+	if !strings.Contains(res.DefinitionBody, "COLLATE") {
+		t.Fatalf("body missing COLLATE: %q", res.DefinitionBody)
+	}
+	if !strings.Contains(res.DefinitionBody, "`mydataset.eventkind`") {
+		t.Fatalf("body missing backtick table: %q", res.DefinitionBody)
+	}
+}
+
+func TestParse_unexpectedHeaderChar(t *testing.T) {
+	_, err := ParseRoutine("CREATE FUNCTION #foo() AS (SELECT 1)", Options{})
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+	if !strings.Contains(err.Error(), "unexpected character") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestParse_nameClauseTerminator(t *testing.T) {
+	_, err := ParseRoutine("CREATE FUNCTION RETURNS INT64 AS (SELECT 1)", Options{})
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+	if !strings.Contains(err.Error(), "expected identifier") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestParse_typeBackupOnMissingType(t *testing.T) {
+	// First arg has no type; parseTypeString consumes then puts back ',' / ')'.
+	res, err := ParseRoutine("CREATE FUNCTION f(x, y INT64) AS (SELECT 1)", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Arguments) != 2 || res.Arguments[0].Name != "x" || res.Arguments[1].Name != "y" {
+		t.Fatalf("args=%+v", res.Arguments)
+	}
+}
+
+func TestParseProcedure_backtickInBeginBody(t *testing.T) {
+	sql := `
+CREATE PROCEDURE mydataset.demo()
+BEGIN
+  SELECT ` + "`col`" + ` FROM ` + "`mydataset.src`" + `;
+END;
+`
+	res, err := ParseRoutine(sql, Options{TrimBody: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(res.DefinitionBody, "`col`") || !strings.Contains(res.DefinitionBody, "`mydataset.src`") {
+		t.Fatalf("body missing backticks: %q", res.DefinitionBody)
 	}
 }
 
