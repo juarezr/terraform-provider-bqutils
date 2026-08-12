@@ -43,6 +43,7 @@ func (p *BqutilsProvider) Metadata(_ context.Context, _ provider.MetadataRequest
 
 func (p *BqutilsProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description:         providerDescription,
 		MarkdownDescription: providerDescription,
 		Attributes:          map[string]schema.Attribute{},
 	}
