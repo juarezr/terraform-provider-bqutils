@@ -1,8 +1,10 @@
 # terraform-provider-bqutils
 
-![GitHub branch status](https://img.shields.io/github/checks-status/juarezr/terraform-provider-bqutils/main?logo=github)
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/juarezr/terraform-provider-bqutils/test.yml?logo=github)
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/juarezr/terraform-provider-bqutils/release.yml?label=release&logo=github)
+![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/juarezr/terraform-provider-bqutils?logo=goland&labelColor=139C5A)
+![GitHub branch check suites](https://img.shields.io/github/check-suites/juarezr/terraform-provider-bqutils/main?logo=github&label=status&link=https%3A%2F%2Fgithub.com%2Fjuarezr%2Fterraform-provider-bqutils%2Factions)
+![GitHub Test Workflow Status](https://img.shields.io/github/actions/workflow/status/juarezr/terraform-provider-bqutils/test.yml?label=test&logo=github&link=https%3A%2F%2Fgithub.com%2Fjuarezr%2Fterraform-provider-bqutils%2Factions%2Fworkflows%2Ftest.yml)
+![GitHub Release Workflow Status](https://img.shields.io/github/actions/workflow/status/juarezr/terraform-provider-bqutils/release.yml?label=release&logo=github&link=https%3A%2F%2Fgithub.com%2Fjuarezr%2Fterraform-provider-bqutils%2Factions%2Fworkflows%2Ftest.yml)
+
 
 ![Terraform Provider Downloads](https://img.shields.io/terraform/provider/dm/2159426?label=registry.terraform.io&link=https%3A%2F%2Fregistry.terraform.io%2Fproviders%2Fjuarezr%2Fbqutils%2Flatest%2Fdocs&logo=terraform&logoColor=FFF)
 ![OpenTofu Registry](https://img.shields.io/badge/OpenTofu_Registry-search.opentofu.org-blue?logo=opentofu&logoColor=FFF)
