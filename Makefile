@@ -105,10 +105,10 @@ verify:
 
 .PHONY: outdated
 outdated:
-	go list -m -u all
+	go list -m -u
 
 .PHONY: upgrade
-update:
-	go get -u all
+upgrade:
+	go get -u
 	go mod tidy
 	go mod verify
