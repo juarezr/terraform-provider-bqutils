@@ -45,6 +45,11 @@ func viewParserSchema() schema.Schema {
 				MarkdownDescription: "View query body after the AS element in the SQL statement.",
 				Computed:            true,
 			},
+			"dataset_references": schema.ListAttribute{
+				ElementType:         types.StringType,
+				MarkdownDescription: "Distinct dataset IDs referenced in the view query that differ from the view's own dataset. Empty when the query only uses the home dataset. Useful with google_bigquery_dataset_access for authorized views.",
+				Computed:            true,
+			},
 			"description": schema.StringAttribute{
 				MarkdownDescription: "Description from the OPTIONS section of the SQL statement, if present.",
 				Computed:            true,

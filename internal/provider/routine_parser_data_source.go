@@ -21,12 +21,14 @@ type routineParserModel struct {
 	TrimBody               types.Bool   `tfsdk:"trim_body"`
 	TrimComments           types.Bool   `tfsdk:"trim_comments"`
 	TrimIndentation        types.Bool   `tfsdk:"trim_indentation"`
+	TargetProject          types.String `tfsdk:"target_project"`
 	ID                     types.String `tfsdk:"id"`
 	Project                types.String `tfsdk:"project"`
 	DatasetID              types.String `tfsdk:"dataset_id"`
 	RoutineID              types.String `tfsdk:"routine_id"`
 	RoutineType            types.String `tfsdk:"routine_type"`
 	DefinitionBody         types.String `tfsdk:"definition_body"`
+	DatasetReferences      types.List   `tfsdk:"dataset_references"`
 	Language               types.String `tfsdk:"language"`
 	ReturnType             types.String `tfsdk:"return_type"`
 	ReturnTableType        types.String `tfsdk:"return_table_type"`
@@ -87,7 +89,23 @@ func (d *RoutineParserDataSource) Read(ctx context.Context, req datasource.ReadR
 	data.DatasetID = stringOrNull(result.DatasetID)
 	data.RoutineID = types.StringValue(result.ObjectID)
 	data.RoutineType = types.StringValue(string(result.Kind))
-	data.DefinitionBody = types.StringValue(result.DefinitionBody)
+
+	targetProject := ""
+	if !data.TargetProject.IsNull() && !data.TargetProject.IsUnknown() {
+		targetProject = data.TargetProject.ValueString()
+	} else if result.Project != "" {
+		targetProject = result.Project
+	}
+	qualified := sqlparse.QualifyBody(result.DefinitionBody, sqlparse.QualifyOptions{
+		TargetProject: targetProject,
+		HomeDataset:   result.DatasetID,
+		Rewrite:       true,
+	})
+	data.DefinitionBody = types.StringValue(qualified.Body)
+	refs, diags := types.ListValueFrom(ctx, types.StringType, qualified.DatasetReferences)
+	resp.Diagnostics.Append(diags...)
+	data.DatasetReferences = refs
+
 	data.Language = stringOrNull(result.Language)
 	data.ReturnType = stringOrNull(result.ReturnTypeJSON)
 	data.ReturnTableType = stringOrNull(result.ReturnTableTypeJSON)

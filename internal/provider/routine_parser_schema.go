@@ -25,6 +25,10 @@ func routineParserSchema() schema.Schema {
 				MarkdownDescription: "Remove the common first-level leading whitespace from each line of definition_body (deeper indentation is kept). Useful for SQL embedded in indented Terraform heredocs. Defaults to true.",
 				Optional:            true,
 			},
+			"target_project": schema.StringAttribute{
+				MarkdownDescription: "When set, two-part dataset.entity references in definition_body that point at datasets other than the routine's own dataset are rewritten as project.dataset.entity for the BigQuery Routines API. Also replaces the `${project}` placeholder. If unset, the project from a three-part CREATE name is used when present.",
+				Optional:            true,
+			},
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Synthetic id matching google_bigquery_routine: projects/<project>/datasets/<dataset_id>/routines/<routine_id>. Missing project or dataset segments use the placeholder \"any\" (not exposed on project/dataset_id).",
 				Computed:            true,
@@ -46,7 +50,12 @@ func routineParserSchema() schema.Schema {
 				Computed:            true,
 			},
 			"definition_body": schema.StringAttribute{
-				MarkdownDescription: "The body of the routine. For functions, this is the expression in the AS clause. If language=SQL, it is the substring inside (but excluding) the parentheses.",
+				MarkdownDescription: "The body of the routine. For functions, this is the expression in the AS clause. If language=SQL, it is the substring inside (but excluding) the parentheses. When target_project (or an inferred CREATE project) is available and the body references other datasets, those two-part refs are project-qualified.",
+				Computed:            true,
+			},
+			"dataset_references": schema.ListAttribute{
+				ElementType:         types.StringType,
+				MarkdownDescription: "Distinct dataset IDs referenced in definition_body that differ from the routine's own dataset. Empty when the body only uses the home dataset. Useful with google_bigquery_dataset_access for authorized routines.",
 				Computed:            true,
 			},
 			"language": schema.StringAttribute{

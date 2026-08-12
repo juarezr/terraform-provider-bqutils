@@ -1,8 +1,6 @@
 package sqlparse
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -33,9 +31,9 @@ func TestParseProcedure_systemVariableNoHang(t *testing.T) {
 	// Regression: '@' was isIdentStart but not isIdentPart, so @@project_id
 	// caused scanIdent to advance 0 bytes and freeze Terraform.
 	sql := `
-CREATE OR REPLACE PROCEDURE appfleet.sp_export_evento_basico_to_gcs(inicio TIMESTAMP)
+CREATE OR REPLACE PROCEDURE mydataset1.export_to_gcs(inicio TIMESTAMP)
 BEGIN
-  DECLARE env_name STRING DEFAULT base1.get_env_name(@@project_id);
+  DECLARE env_name STRING DEFAULT mydataset5.get_env_name(@@project_id);
   SELECT env_name;
 END;
 `
@@ -43,7 +41,7 @@ END;
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Kind != KindProcedure || res.ObjectID != "sp_export_evento_basico_to_gcs" {
+	if res.Kind != KindProcedure || res.ObjectID != "export_to_gcs" {
 		t.Fatalf("kind=%s id=%s", res.Kind, res.ObjectID)
 	}
 	if !strings.Contains(res.DefinitionBody, "@@project_id") {
@@ -84,18 +82,63 @@ END;
 }
 
 func TestParseProcedure_exportDataFixtureNoHang(t *testing.T) {
-	// Full customer fixture that previously froze Terraform (@@project_id + END IF + CASE).
-	path := filepath.Join("..", "..", "sketch", "instructions", "bug-fix-infinite-recursion",
-		"appfleet.sp_export_evento_basico_to_gcs.sql")
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Skipf("fixture not present (sketch/ may be gitignored): %v", err)
-	}
-	res, err := parseRoutineWithTimeout(t, string(raw), Options{TrimBody: true})
+	// Full fixture that previously froze Terraform (@@project_id + END IF + CASE).
+	sql := `
+CREATE OR REPLACE PROCEDURE mydataset1.export_to_gcs
+(
+  started              TIMESTAMP,
+  finished             TIMESTAMP,
+  separator           STRING
+) BEGIN
+
+DECLARE file_uuid STRING DEFAULT GENERATE_UUID ();
+
+DECLARE dt_started STRING DEFAULT FORMAT_DATETIME('%Y%m%d', started);
+DECLARE dt_finished STRING DEFAULT FORMAT_DATETIME('%Y%m%d', finished);
+DECLARE dt_current STRING DEFAULT FORMAT_DATETIME('%Y%m%d_%H%M%S', CURRENT_TIMESTAMP);
+
+DECLARE env_name STRING DEFAULT mydataset3.get_env_name(@@project_id);
+
+DECLARE separator2 STRING DEFAULT COALESCE(NULLIF(TRIM(separator),''),';');
+DECLARE replacement STRING DEFAULT CASE WHEN separator2 = ';' THEN ',' WHEN separator2 = ',' THEN ';' ELSE '' END;
+DECLARE decimalrepl STRING DEFAULT CASE separator2 WHEN '.' THEN ',' ELSE '.' END;
+
+DECLARE gcs_uri STRING DEFAULT FORMAT(
+    'gs://mybucket/env-%s/my-events-at-%s-from-%s-%s-%s-*.csv.gz',
+    env_name, dt_current, dt_started, dt_finished, file_uuid);
+
+EXPORT DATA OPTIONS (
+    uri=( gcs_uri ),
+    overwrite = true,
+    compression = 'GZIP',
+    format = 'CSV',
+    header = true,
+    field_delimiter = ( separator2 )
+) AS (
+  SELECT
+        ev.eventid
+      , FORMAT_DATETIME('%Y-%m-%d %H:%M:%S', DATETIME_TRUNC(DATETIME(ev.created), SECOND)) AS created
+      , (SELECT te.eventname FROM mydataset2.eventtype AS te WHERE te.id = ev.eventtypeid) AS eventname
+      , REPLACE(TRIM(CAST(ROUND(ev.latitude,  6) AS STRING FORMAT '99990.099999')), '.', decimalrepl) AS latitude
+      , REPLACE(TRIM(CAST(ROUND(ev.longitude, 6) AS STRING FORMAT '99990.099999')), '.', decimalrepl) AS longitude
+      , REPLACE(TRIM(CAST(ROUND(ev.mileage / 1000.0, 3) AS STRING FORMAT '9999999990.000')), '.', decimalrepl) AS mileage
+      , REPLACE(CAST(ROUND(ev.velocity, 2) AS STRING), '.', decimalrepl) AS velocity
+  FROM mydataset2.events AS ev
+  WHERE ev.created BETWEEN started AND finished
+    AND ev.created IS NOT NULL
+  ORDER BY ev.eventid ASC, ev.created ASC, ev.mileage DESC, ev.eventtypeid
+  LIMIT 999999999999
+);
+
+SELECT gcs_uri AS gcs_uri;
+
+END;
+`
+	res, err := parseRoutineWithTimeout(t, sql, Options{TrimBody: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.ObjectID != "sp_export_evento_basico_to_gcs" {
+	if res.ObjectID != "export_to_gcs" {
 		t.Fatalf("object_id=%s", res.ObjectID)
 	}
 	if !strings.Contains(res.DefinitionBody, "@@project_id") {

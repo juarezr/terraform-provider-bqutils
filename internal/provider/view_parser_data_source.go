@@ -26,6 +26,7 @@ type viewParserModel struct {
 	DatasetID                     types.String `tfsdk:"dataset_id"`
 	TableID                       types.String `tfsdk:"table_id"`
 	Query                         types.String `tfsdk:"query"`
+	DatasetReferences             types.List   `tfsdk:"dataset_references"`
 	Description                   types.String `tfsdk:"description"`
 	FriendlyName                  types.String `tfsdk:"friendly_name"`
 	Labels                        types.Map    `tfsdk:"labels"`
@@ -87,6 +88,13 @@ func (d *ViewParserDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	data.DatasetID = stringOrNull(result.DatasetID)
 	data.TableID = types.StringValue(result.ObjectID)
 	data.Query = types.StringValue(result.Query)
+	qualified := sqlparse.QualifyBody(result.Query, sqlparse.QualifyOptions{
+		HomeDataset: result.DatasetID,
+		Rewrite:     false,
+	})
+	refs, diags := types.ListValueFrom(ctx, types.StringType, qualified.DatasetReferences)
+	resp.Diagnostics.Append(diags...)
+	data.DatasetReferences = refs
 	data.Description = stringOrNull(result.Description)
 	data.FriendlyName = stringOrNull(result.FriendlyName)
 	data.IsMaterialized = types.BoolValue(result.IsMaterialized)

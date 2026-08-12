@@ -85,7 +85,7 @@ func TestParseJSFunction(t *testing.T) {
 
 func TestParseAggregateFunction(t *testing.T) {
 	sql := `
-    CREATE AGGREGATE FUNCTION appfleet.scaled_sum
+    CREATE AGGREGATE FUNCTION mydataset1.scaled_sum
     (
       dividend FLOAT64,
       divisor FLOAT64
@@ -100,7 +100,7 @@ func TestParseAggregateFunction(t *testing.T) {
 	if res.Kind != KindAggregateFunction {
 		t.Fatalf("kind=%s", res.Kind)
 	}
-	if res.DatasetID != "appfleet" || res.ObjectID != "scaled_sum" {
+	if res.DatasetID != "mydataset1" || res.ObjectID != "scaled_sum" {
 		t.Fatalf("name=%s.%s", res.DatasetID, res.ObjectID)
 	}
 	if !strings.Contains(res.ReturnTypeJSON, "FLOAT64") {
@@ -122,7 +122,7 @@ func TestParseAggregateFunction(t *testing.T) {
 
 func TestParseAggregateFunctionNotAggregate(t *testing.T) {
 	sql := `
-    CREATE AGGREGATE FUNCTION appfleet.weighted_sum
+    CREATE AGGREGATE FUNCTION mydataset1.weighted_sum
     (
       dividend FLOAT64,
       divisor FLOAT64 NOT AGGREGATE
