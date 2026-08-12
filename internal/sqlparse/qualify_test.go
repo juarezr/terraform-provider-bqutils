@@ -21,7 +21,7 @@ func TestQualifyBody_arrayDistinctCall(t *testing.T) {
 	if !reflect.DeepEqual(got.DatasetReferences, []string{"mydataset5"}) {
 		t.Fatalf("refs=%v", got.DatasetReferences)
 	}
-	if !strings.Contains(got.Body, "myproj.mydataset5.array_distinct(") {
+	if !strings.Contains(got.Body, "`myproj`.`mydataset5`.`array_distinct`(") {
 		t.Fatalf("body not rewritten: %q", got.Body)
 	}
 	if strings.Contains(got.Body, " myproj.tab ") || strings.Contains(got.Body, "FROM myproj.tab") {
@@ -46,7 +46,8 @@ LEFT JOIN mydataset7.target t ON t.id = d.target_id
 		t.Fatalf("refs=%v want=%v", got.DatasetReferences, wantRefs)
 	}
 	for _, ds := range wantRefs {
-		if !strings.Contains(got.Body, "env-proj."+ds+".") {
+		needle := "`env-proj`.`" + ds + "`."
+		if !strings.Contains(got.Body, needle) {
 			t.Fatalf("missing qualify for %s in %q", ds, got.Body)
 		}
 	}
@@ -123,12 +124,12 @@ END`
 		t.Fatalf("refs=%v want=%v", got.DatasetReferences, want)
 	}
 	checks := []string{
-		"p.mydataset5.get_env_name(",
-		"p.mydataset2.myprocedure2(",
-		"p.mydataset2.mytable3",
-		"p.mydataset3.mytable4",
-		"p.mydataset3.mytable5",
-		"p.mydataset3.mytable6",
+		"`p`.`mydataset5`.`get_env_name`(",
+		"`p`.`mydataset2`.`myprocedure2`(",
+		"`p`.`mydataset2`.`mytable3`",
+		"`p`.`mydataset3`.`mytable4`",
+		"`p`.`mydataset3`.`mytable5`",
+		"`p`.`mydataset3`.`mytable6`",
 	}
 	for _, c := range checks {
 		if !strings.Contains(got.Body, c) {
@@ -150,8 +151,8 @@ func TestQualifyBody_backticks(t *testing.T) {
 	if !strings.Contains(got.Body, "`p`.`mydataset4`.`vehicle`") {
 		t.Fatalf("per-segment backticks: %q", got.Body)
 	}
-	if !strings.Contains(got.Body, "`p.mydataset7.driver`") {
-		t.Fatalf("joined backtick: %q", got.Body)
+	if !strings.Contains(got.Body, "`p`.`mydataset7`.`driver`") {
+		t.Fatalf("joined backtick source must rewrite to per-segment: %q", got.Body)
 	}
 }
 
@@ -185,10 +186,10 @@ CROSS JOIN mydataset5.lookup l`
 	if !reflect.DeepEqual(got.DatasetReferences, []string{"mydataset5"}) {
 		t.Fatalf("refs=%v", got.DatasetReferences)
 	}
-	if strings.Contains(got.Body, "p.tab") {
+	if strings.Contains(got.Body, "`p`.`tab`") || strings.Contains(got.Body, "p.tab") {
 		t.Fatalf("CTE tab must not be qualified: %q", got.Body)
 	}
-	if !strings.Contains(got.Body, "p.mydataset5.lookup") {
+	if !strings.Contains(got.Body, "`p`.`mydataset5`.`lookup`") {
 		t.Fatalf("lookup not qualified: %q", got.Body)
 	}
 }
@@ -203,8 +204,24 @@ func TestQualifyBody_tvfCallInFrom(t *testing.T) {
 	if !reflect.DeepEqual(got.DatasetReferences, []string{"mydataset4"}) {
 		t.Fatalf("refs=%v", got.DatasetReferences)
 	}
-	if !strings.Contains(got.Body, "p.mydataset4.test_returns_table(3)") {
+	if !strings.Contains(got.Body, "`p`.`mydataset4`.`test_returns_table`(3)") {
 		t.Fatalf("body=%q", got.Body)
+	}
+}
+
+func TestQualifyBody_hyphenatedProject(t *testing.T) {
+	body := `SELECT base1.array_distinct([1, 1, 2]) AS unique_items`
+	got := QualifyBody(body, QualifyOptions{
+		TargetProject: "bigdatapoc-374615",
+		HomeDataset:   "appfleet",
+		Rewrite:       true,
+	})
+	want := "SELECT `bigdatapoc-374615`.`base1`.`array_distinct`([1, 1, 2]) AS unique_items"
+	if got.Body != want {
+		t.Fatalf("body=%q want=%q", got.Body, want)
+	}
+	if strings.Contains(got.Body, "bigdatapoc-374615.base1") {
+		t.Fatalf("unquoted hyphenated project must not appear: %q", got.Body)
 	}
 }
 

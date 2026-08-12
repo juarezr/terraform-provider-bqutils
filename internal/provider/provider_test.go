@@ -169,7 +169,7 @@ func TestAccRoutineParser_targetProjectRewrite(t *testing.T) {
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_id", "mydataset1"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_references.#", "1"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_references.0", "mydataset2"),
-					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "definition_body", "SELECT env-proj.mydataset2.array_distinct([1, 1, 2]) AS unique_items"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "definition_body", "SELECT `env-proj`.`mydataset2`.`array_distinct`([1, 1, 2]) AS unique_items"),
 				),
 			},
 		},
@@ -186,13 +186,13 @@ func TestAccRoutineParser_inferTargetProjectFromCreateName(t *testing.T) {
 						sql = <<-EOF
 							CREATE FUNCTION ` + "`myproj.mydataset1.fn`" + `(x INT64)
 							RETURNS INT64
-							AS (myproj.mydataset2.add_one(x));
+							AS (mydataset2.add_one(x));
 						EOF
 					}`,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "project", "myproj"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_references.0", "mydataset2"),
-					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "definition_body", "myproj.mydataset2.add_one(x)"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "definition_body", "`myproj`.`mydataset2`.`add_one`(x)"),
 				),
 			},
 		},

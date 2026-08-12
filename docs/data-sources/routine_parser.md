@@ -325,7 +325,7 @@ resource "google_bigquery_routine" "test_array_distinct" {
     }
   }
 
-  # Body is rewritten so mydataset1.array_distinct becomes <project>.mydataset1.array_distinct
+  # Body is rewritten so mydataset1.array_distinct becomes `project`.`mydataset1`.`array_distinct`
   definition_body = data.bqutils_routine_parser.test_array_distinct.definition_body
 
   security_mode = "INVOKER"
@@ -361,7 +361,7 @@ resource "google_bigquery_dataset_access" "test_array_distinct" {
 
 ### Optional
 
-- `target_project` (String) When set, two-part dataset.entity references in definition_body that point at datasets other than the routine's own dataset are rewritten as project.dataset.entity for the BigQuery Routines API. Also replaces the `${project}` placeholder. If unset, the project from a three-part CREATE name is used when present.
+- `target_project` (String) When set, two-part dataset.entity references in definition_body that point at datasets other than the routine's own dataset are rewritten as `project`.`dataset`.`entity` (backtick-quoted) for the BigQuery Routines API. Also replaces the `${project}` placeholder. If unset, the project from a three-part CREATE name is used when present.
 - `trim_body` (Boolean) Trim leading/trailing whitespace and empty lines from definition_body. Defaults to true.
 - `trim_comments` (Boolean) Remove SQL comments from definition_body. Defaults to false.
 - `trim_indentation` (Boolean) Remove the common first-level leading whitespace from each line of definition_body (deeper indentation is kept). Useful for SQL embedded in indented Terraform heredocs. Defaults to true.

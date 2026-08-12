@@ -26,7 +26,7 @@ func routineParserSchema() schema.Schema {
 				Optional:            true,
 			},
 			"target_project": schema.StringAttribute{
-				MarkdownDescription: "When set, two-part dataset.entity references in definition_body that point at datasets other than the routine's own dataset are rewritten as project.dataset.entity for the BigQuery Routines API. Also replaces the `${project}` placeholder. If unset, the project from a three-part CREATE name is used when present.",
+				MarkdownDescription: "When set, two-part dataset.entity references in definition_body that point at datasets other than the routine's own dataset are rewritten as `project`.`dataset`.`entity` (backtick-quoted) for the BigQuery Routines API. Also replaces the `${project}` placeholder. If unset, the project from a three-part CREATE name is used when present.",
 				Optional:            true,
 			},
 			"id": schema.StringAttribute{

@@ -28,7 +28,7 @@ resource "google_bigquery_routine" "test_array_distinct" {
     }
   }
 
-  # Body is rewritten so mydataset1.array_distinct becomes <project>.mydataset1.array_distinct
+  # Body is rewritten so mydataset1.array_distinct becomes `project`.`mydataset1`.`array_distinct`
   definition_body = data.bqutils_routine_parser.test_array_distinct.definition_body
 
   security_mode = "INVOKER"

@@ -99,24 +99,13 @@ func rewriteTwoPartRefs(body string, refs []bodyRef, opts QualifyOptions) string
 }
 
 func formatQualifiedRef(project string, r bodyRef) string {
+	// Always backtick-quote each segment. Unquoted project IDs with hyphens
+	// (e.g. bigdatapoc-374615) are invalid SQL for the Routines API.
 	if r.infoSchema {
-		// Preserve `dataset`.INFORMATION_SCHEMA.x vs bare forms
-		if r.backticked && !r.joinedBT {
-			// Original often looks like `ds`.INFORMATION_SCHEMA.TABLES
-			return "`" + project + "`." + "`" + r.dataset + "`." + r.object
-		}
-		if r.joinedBT {
-			return "`" + project + "." + r.dataset + "." + r.object + "`"
-		}
-		return project + "." + r.dataset + "." + r.object
+		// dataset.INFORMATION_SCHEMA.object → `project`.`dataset`.INFORMATION_SCHEMA.object
+		return "`" + project + "`." + "`" + r.dataset + "`." + r.object
 	}
-	if r.joinedBT {
-		return "`" + project + "." + r.dataset + "." + r.object + "`"
-	}
-	if r.backticked {
-		return "`" + project + "`." + "`" + r.dataset + "`." + "`" + r.object + "`"
-	}
-	return project + "." + r.dataset + "." + r.object
+	return "`" + project + "`." + "`" + r.dataset + "`." + "`" + r.object + "`"
 }
 
 func findBodyRefs(s string) []bodyRef {
