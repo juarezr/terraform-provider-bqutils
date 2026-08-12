@@ -267,137 +267,17 @@ func (p *parser) parseRoutineRest(res *ParseResult) (*ParseResult, error) {
 	}
 	res.Project, res.DatasetID, res.ObjectID = SplitQualifiedName(name)
 
-	// optional argument list
-	if p.peek().kind == tokLParen {
-		args, err := p.parseArgumentList()
-		if err != nil {
-			return nil, err
-		}
-		if res.Kind == KindAggregateFunction {
-			for i := range args {
-				if args[i].IsAggregate == nil {
-					agg := true
-					args[i].IsAggregate = &agg
-				}
-			}
-		}
-		res.Arguments = args
+	if err := p.parseOptionalArgumentList(res); err != nil {
+		return nil, err
+	}
+	if err := p.parseReturns(res); err != nil {
+		return nil, err
 	}
 
-	// RETURNS ...
-	if p.peek().kind == tokReturns {
-		p.next()
-		if p.peek().kind == tokTable || (p.peek().kind == tokIdent && strings.EqualFold(p.peek().lit, "TABLE")) {
-			p.next()
-			typeStr, err := p.parseTypeString()
-			if err != nil {
-				return nil, err
-			}
-			if !strings.HasPrefix(strings.ToUpper(typeStr), "TABLE") {
-				typeStr = "TABLE" + typeStr
-			}
-			if strings.Contains(typeStr, "<") {
-				inner := extractAngleContents(typeStr)
-				fields, err := parseStructFields(inner)
-				if err != nil {
-					return nil, err
-				}
-				js, err := tableTypeToJSON(fields)
-				if err != nil {
-					return nil, err
-				}
-				res.ReturnTableTypeJSON = js
-			}
-		} else {
-			typeStr, err := p.parseTypeString()
-			if err != nil {
-				return nil, err
-			}
-			js, err := sqlTypeToJSON(typeStr)
-			if err != nil {
-				return nil, &ParseError{Message: err.Error(), Line: p.peek().line, Column: p.peek().col}
-			}
-			res.ReturnTypeJSON = js
-		}
+	bodySeen, err := p.parseRoutineClauses(res)
+	if err != nil {
+		return nil, err
 	}
-
-	// Trailing clauses in flexible order: LANGUAGE, (REMOTE)? WITH CONNECTION, OPTIONS, AS/BEGIN body.
-	bodySeen := false
-	for {
-		switch p.peek().kind {
-		case tokLanguage:
-			p.next()
-			t := p.next()
-			lang := strings.ToUpper(t.lit)
-			switch lang {
-			case "JS", "JAVASCRIPT":
-				res.Language = "JAVASCRIPT"
-			case "SQL", "PYTHON", "JAVA", "SCALA":
-				res.Language = lang
-			default:
-				res.Language = lang
-			}
-		case tokRemote:
-			p.next()
-			if _, err := p.expect(tokWith, "WITH"); err != nil {
-				return nil, err
-			}
-			if _, err := p.expect(tokConnection, "CONNECTION"); err != nil {
-				return nil, err
-			}
-			conn, err := p.parseQualifiedName()
-			if err != nil {
-				return nil, err
-			}
-			res.ensureRemote().Connection = conn
-		case tokWith:
-			p.next()
-			if _, err := p.expect(tokConnection, "CONNECTION"); err != nil {
-				return nil, err
-			}
-			conn, err := p.parseQualifiedName()
-			if err != nil {
-				return nil, err
-			}
-			// Spark procedures vs Python UDF connection targets.
-			switch {
-			case res.Kind == KindProcedure:
-				res.ensureSpark().Connection = conn
-			case res.Language == "PYTHON":
-				res.ensureExternalRuntime().RuntimeConnection = conn
-			default:
-				// LANGUAGE may appear after WITH CONNECTION; defer routing.
-				p.pendingWithConnection = conn
-			}
-		case tokOptions:
-			if err := p.parseOptions(res); err != nil {
-				return nil, err
-			}
-		case tokAs:
-			asTok := p.next()
-			body, _, cerr := captureBody(p.input, asTok.offset+len(asTok.lit))
-			if cerr != nil {
-				return nil, cerr
-			}
-			res.DefinitionBody = body
-			bodySeen = true
-			goto doneClauses
-		case tokBegin:
-			beginTok := p.peek()
-			body, _, cerr := captureBody(p.input, beginTok.offset)
-			if cerr != nil {
-				return nil, cerr
-			}
-			res.DefinitionBody = body
-			bodySeen = true
-			goto doneClauses
-		case tokEOF, tokSemi:
-			goto doneClauses
-		default:
-			goto doneClauses
-		}
-	}
-doneClauses:
 	if !bodySeen && !routineBodyOptional(res) {
 		t := p.peek()
 		return nil, &ParseError{Message: "expected AS or BEGIN", Line: t.line, Column: t.col, Offset: t.offset}
@@ -407,6 +287,168 @@ doneClauses:
 	}
 	finalizeRoutineClassification(res, p.pendingWithConnection)
 	return res, nil
+}
+
+func (p *parser) parseOptionalArgumentList(res *ParseResult) error {
+	if p.peek().kind != tokLParen {
+		return nil
+	}
+	args, err := p.parseArgumentList()
+	if err != nil {
+		return err
+	}
+	if res.Kind == KindAggregateFunction {
+		for i := range args {
+			if args[i].IsAggregate == nil {
+				agg := true
+				args[i].IsAggregate = &agg
+			}
+		}
+	}
+	res.Arguments = args
+	return nil
+}
+
+func (p *parser) parseReturns(res *ParseResult) error {
+	if p.peek().kind != tokReturns {
+		return nil
+	}
+	p.next()
+	if p.peek().kind == tokTable || (p.peek().kind == tokIdent && strings.EqualFold(p.peek().lit, "TABLE")) {
+		p.next()
+		typeStr, err := p.parseTypeString()
+		if err != nil {
+			return err
+		}
+		if !strings.HasPrefix(strings.ToUpper(typeStr), "TABLE") {
+			typeStr = "TABLE" + typeStr
+		}
+		if strings.Contains(typeStr, "<") {
+			inner := extractAngleContents(typeStr)
+			fields, err := parseStructFields(inner)
+			if err != nil {
+				return err
+			}
+			js, err := tableTypeToJSON(fields)
+			if err != nil {
+				return err
+			}
+			res.ReturnTableTypeJSON = js
+		}
+		return nil
+	}
+	typeStr, err := p.parseTypeString()
+	if err != nil {
+		return err
+	}
+	js, err := sqlTypeToJSON(typeStr)
+	if err != nil {
+		return &ParseError{Message: err.Error(), Line: p.peek().line, Column: p.peek().col}
+	}
+	res.ReturnTypeJSON = js
+	return nil
+}
+
+func (p *parser) parseRoutineClauses(res *ParseResult) (bodySeen bool, err error) {
+	for {
+		switch p.peek().kind {
+		case tokLanguage:
+			p.parseLanguageClause(res)
+		case tokRemote:
+			if err := p.parseRemoteWithConnection(res); err != nil {
+				return false, err
+			}
+		case tokWith:
+			if err := p.parseWithConnection(res); err != nil {
+				return false, err
+			}
+		case tokOptions:
+			if err := p.parseOptions(res); err != nil {
+				return false, err
+			}
+		case tokAs, tokBegin:
+			if err := p.parseRoutineBody(res); err != nil {
+				return false, err
+			}
+			return true, nil
+		default:
+			return false, nil
+		}
+	}
+}
+
+func (p *parser) parseLanguageClause(res *ParseResult) {
+	p.next()
+	t := p.next()
+	lang := strings.ToUpper(t.lit)
+	switch lang {
+	case "JS", "JAVASCRIPT":
+		res.Language = "JAVASCRIPT"
+	case "SQL", "PYTHON", "JAVA", "SCALA":
+		res.Language = lang
+	default:
+		res.Language = lang
+	}
+}
+
+func (p *parser) parseRemoteWithConnection(res *ParseResult) error {
+	p.next()
+	if _, err := p.expect(tokWith, "WITH"); err != nil {
+		return err
+	}
+	if _, err := p.expect(tokConnection, "CONNECTION"); err != nil {
+		return err
+	}
+	conn, err := p.parseQualifiedName()
+	if err != nil {
+		return err
+	}
+	res.ensureRemote().Connection = conn
+	return nil
+}
+
+func (p *parser) parseWithConnection(res *ParseResult) error {
+	p.next()
+	if _, err := p.expect(tokConnection, "CONNECTION"); err != nil {
+		return err
+	}
+	conn, err := p.parseQualifiedName()
+	if err != nil {
+		return err
+	}
+	switch {
+	case res.Kind == KindProcedure:
+		res.ensureSpark().Connection = conn
+	case res.Language == "PYTHON":
+		res.ensureExternalRuntime().RuntimeConnection = conn
+	default:
+		p.pendingWithConnection = conn
+	}
+	return nil
+}
+
+func (p *parser) parseRoutineBody(res *ParseResult) error {
+	switch p.peek().kind {
+	case tokAs:
+		asTok := p.next()
+		body, _, cerr := captureBody(p.input, asTok.offset+len(asTok.lit))
+		if cerr != nil {
+			return cerr
+		}
+		res.DefinitionBody = body
+		return nil
+	case tokBegin:
+		beginTok := p.peek()
+		body, _, cerr := captureBody(p.input, beginTok.offset)
+		if cerr != nil {
+			return cerr
+		}
+		res.DefinitionBody = body
+		return nil
+	default:
+		t := p.peek()
+		return &ParseError{Message: "expected AS or BEGIN", Line: t.line, Column: t.col, Offset: t.offset}
+	}
 }
 
 func routineBodyOptional(res *ParseResult) bool {
