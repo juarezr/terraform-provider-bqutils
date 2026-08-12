@@ -178,6 +178,8 @@ When Terraform updates a BigQuery routine, any authorized-routine grants on othe
 
 To keep access on the routine, use a [google_bigquery_dataset_access](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_dataset_access) resource and configure its `lifecycle.replace_triggered_by` argument so that when the routine body, return type, or arguments are modified, Terraform also reapplies the routine grants.
 
+Use `dataset_references` with `for_each` so every foreign dataset named in the SQL body receives an authorized-routine grant. The list is empty when the body only references the routine's own dataset.
+
 Example SQL file to create a routine (placed next to the Terraform code):
 
 ```sql
@@ -201,12 +203,14 @@ OPTIONS (
 );
 ```
 
-Terraform code that creates the routine and grants access to the dataset:
+Terraform code that creates the routine and grants access on each referenced dataset:
 
 ```terraform
 # Load the routine SQL from a file in the same folder as the Terraform code.
 data "bqutils_routine_parser" "list_tables" {
   sql = file("${path.module}/mydataset.list_tables.sql")
+
+  target_project = data.google_bigquery_dataset.mydataset1.project
 
   trim_body = true
 }
@@ -216,13 +220,9 @@ data "google_bigquery_dataset" "mydataset1" {
   dataset_id = "mydataset1"
 }
 
-# Gets the BigQuery dataset where the routine reads from (authorize the routine on this dataset).
-data "google_bigquery_dataset" "mydataset2" {
-  dataset_id = "mydataset2"
-}
-
 # Create the routine in BigQuery using the attributes parsed from the SQL file.
 resource "google_bigquery_routine" "list_tables" {
+  project    = data.google_bigquery_dataset.mydataset1.project
   dataset_id = data.google_bigquery_dataset.mydataset1.dataset_id
 
   routine_id   = data.bqutils_routine_parser.list_tables.routine_id
@@ -242,11 +242,12 @@ resource "google_bigquery_routine" "list_tables" {
   definition_body = data.bqutils_routine_parser.list_tables.definition_body
 }
 
-# Grant authorized-routine access on mydataset2 after the routine is created/modified
-# The lifecycle block triggers modification when the routine SQL content changes in
-# the previous google_bigquery_routine resource.
+# Grant authorized-routine access on each foreign dataset referenced in the SQL body.
+# dataset_references is empty when the body only uses the routine's own dataset.
 resource "google_bigquery_dataset_access" "list_tables" {
-  dataset_id = data.google_bigquery_dataset.mydataset2.dataset_id
+  for_each = toset(data.bqutils_routine_parser.list_tables.dataset_references)
+
+  dataset_id = each.key
 
   routine {
     project_id = google_bigquery_routine.list_tables.project
@@ -264,9 +265,90 @@ resource "google_bigquery_dataset_access" "list_tables" {
 
   depends_on = [
     data.google_bigquery_dataset.mydataset1,
-    data.google_bigquery_dataset.mydataset2,
     data.bqutils_routine_parser.list_tables
   ]
+}
+```
+
+### Qualifying multi-dataset references for the Routines API
+
+BigQuery's Routines API requires project-qualified entity references inside SQL routine bodies (unlike running `CREATE OR REPLACE` as a query job in Studio/Web console/bq CLI). Keep Studio-friendly SQL with `dataset.table` / `dataset.fn` names, set `target_project`, and use the rewritten `definition_body`.
+
+Example SQL:
+
+```sql
+CREATE OR REPLACE TABLE FUNCTION mydataset1.test_array_distinct(
+    max_value INT64
+) AS (
+    WITH tab AS (
+        SELECT 1 AS id, [1,2,3] AS items UNION ALL
+        SELECT 2 AS id, [1,2]   AS items
+    )
+    SELECT t.id
+        , mydataset1.array_distinct(ARRAY_CONCAT_AGG(t.items)) AS unique_items
+     FROM tab AS t
+    WHERE t.id <= max_value
+    GROUP BY t.id
+);
+```
+
+Terraform that injects the project and grants authorized-routine access from `dataset_references`:
+
+```terraform
+# Load Studio-friendly SQL that uses unqualified dataset.entity references.
+data "bqutils_routine_parser" "test_array_distinct" {
+  sql = file("${path.module}/mydataset1.test_array_distinct.sql")
+
+  # Qualify foreign dataset refs for the Routines API without editing the SQL file.
+  target_project = data.google_bigquery_dataset.mydataset.project
+
+  trim_body = true
+}
+
+data "google_bigquery_dataset" "mydataset" {
+  dataset_id = "mydataset1"
+}
+
+resource "google_bigquery_routine" "test_array_distinct" {
+  project      = data.google_bigquery_dataset.mydataset.project
+  dataset_id   = data.google_bigquery_dataset.mydataset.dataset_id
+  routine_id   = data.bqutils_routine_parser.test_array_distinct.routine_id
+  routine_type = data.bqutils_routine_parser.test_array_distinct.routine_type
+  language     = data.bqutils_routine_parser.test_array_distinct.language
+
+  dynamic "arguments" {
+    for_each = data.bqutils_routine_parser.test_array_distinct.arguments
+    content {
+      name          = arguments.value.name
+      argument_kind = arguments.value.argument_kind
+      data_type     = arguments.value.data_type
+    }
+  }
+
+  # Body is rewritten so mydataset1.array_distinct becomes <project>.mydataset1.array_distinct
+  definition_body = data.bqutils_routine_parser.test_array_distinct.definition_body
+
+  security_mode = "INVOKER"
+}
+
+# Grant authorized-routine access on every foreign dataset referenced in the SQL body.
+resource "google_bigquery_dataset_access" "test_array_distinct" {
+  for_each = toset(data.bqutils_routine_parser.test_array_distinct.dataset_references)
+
+  dataset_id = each.key
+
+  routine {
+    project_id = google_bigquery_routine.test_array_distinct.project
+    dataset_id = google_bigquery_routine.test_array_distinct.dataset_id
+    routine_id = google_bigquery_routine.test_array_distinct.routine_id
+  }
+
+  lifecycle {
+    replace_triggered_by = [
+      google_bigquery_routine.test_array_distinct.definition_body,
+      google_bigquery_routine.test_array_distinct.arguments
+    ]
+  }
 }
 ```
 
@@ -279,6 +361,7 @@ resource "google_bigquery_dataset_access" "list_tables" {
 
 ### Optional
 
+- `target_project` (String) When set, two-part dataset.entity references in definition_body that point at datasets other than the routine's own dataset are rewritten as project.dataset.entity for the BigQuery Routines API. Also replaces the `${project}` placeholder. If unset, the project from a three-part CREATE name is used when present.
 - `trim_body` (Boolean) Trim leading/trailing whitespace and empty lines from definition_body. Defaults to true.
 - `trim_comments` (Boolean) Remove SQL comments from definition_body. Defaults to false.
 - `trim_indentation` (Boolean) Remove the common first-level leading whitespace from each line of definition_body (deeper indentation is kept). Useful for SQL embedded in indented Terraform heredocs. Defaults to true.
@@ -288,7 +371,8 @@ resource "google_bigquery_dataset_access" "list_tables" {
 - `arguments` (Attributes List) Routine arguments parsed from the SQL CREATE FUNCTION or CREATE PROCEDURE statement. (see [below for nested schema](#nestedatt--arguments))
 - `data_governance_type` (String) If set to DATA_MASKING, the function is validated and made available as a masking function.
 - `dataset_id` (String) Routine dataset parsed from the SQL statement, if present.
-- `definition_body` (String) The body of the routine. For functions, this is the expression in the AS clause. If language=SQL, it is the substring inside (but excluding) the parentheses.
+- `dataset_references` (List of String) Distinct dataset IDs referenced in definition_body that differ from the routine's own dataset. Empty when the body only uses the home dataset. Useful with google_bigquery_dataset_access for authorized routines.
+- `definition_body` (String) The body of the routine. For functions, this is the expression in the AS clause. If language=SQL, it is the substring inside (but excluding) the parentheses. When target_project (or an inferred CREATE project) is available and the body references other datasets, those two-part refs are project-qualified.
 - `description` (String) Description parsed from the SQL OPTIONS clause, if present.
 - `determinism_level` (String) Determinism level of a JavaScript UDF if defined. Possible values: DETERMINISM_LEVEL_UNSPECIFIED, DETERMINISTIC, NOT_DETERMINISTIC.
 - `external_runtime_options` (Attributes) External runtime options for Python UDFs (maps to google_bigquery_routine.external_runtime_options). (see [below for nested schema](#nestedatt--external_runtime_options))
