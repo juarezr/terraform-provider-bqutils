@@ -175,8 +175,8 @@ func (l *lexer) scanAll() {
 				lit := l.scanIdent()
 				kind := keywordKind(lit)
 				l.tokens = append(l.tokens, token{kind: kind, lit: lit, line: line, col: col, offset: off})
-				// Stop header lexing at AS — body is captured from raw input later.
-				if kind == tokAs {
+				// Stop header lexing at AS / BEGIN — body is captured from raw input later.
+				if kind == tokAs || kind == tokBegin {
 					l.tokens = append(l.tokens, token{kind: tokEOF, line: l.line, col: l.col, offset: l.pos})
 					return
 				}
@@ -248,11 +248,19 @@ func isIdentStart(r rune) bool {
 }
 
 func isIdentPart(r rune) bool {
-	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '$'
+	// Include '@' so BigQuery system vars (@@project_id) and @params scan as one token
+	// and never zero-width-loop in scanIdent.
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '$' || r == '@'
 }
 
 func (l *lexer) scanIdent() string {
 	start := l.pos
+	// Always consume the start rune (caller guarantees isIdentStart). This prevents
+	// infinite loops if isIdentStart and isIdentPart ever disagree again.
+	if l.pos < len(l.input) {
+		_, size := utf8.DecodeRuneInString(l.input[l.pos:])
+		l.advance(size)
+	}
 	for l.pos < len(l.input) {
 		r, size := utf8.DecodeRuneInString(l.input[l.pos:])
 		if !isIdentPart(r) {
@@ -428,6 +436,37 @@ func keywordKind(lit string) int {
 	}
 }
 
+// peekSQLKeyword skips whitespace and returns the next SQL keyword/ident (uppercased)
+// and the offset after it. Empty next means no word.
+func peekSQLKeyword(input string, i int) (next string, end int) {
+	for i < len(input) && unicode.IsSpace(rune(input[i])) {
+		i++
+	}
+	if i >= len(input) || !isIdentStart(rune(input[i])) {
+		return "", i
+	}
+	start := i
+	r, size := utf8.DecodeRuneInString(input[i:])
+	i += size
+	for i < len(input) {
+		r, size = utf8.DecodeRuneInString(input[i:])
+		if !isIdentPart(r) {
+			break
+		}
+		i += size
+	}
+	return strings.ToUpper(input[start:i]), i
+}
+
+func isBeginEndCloser(word string) bool {
+	switch word {
+	case "IF", "WHILE", "LOOP", "FOR", "CASE", "REPEAT":
+		return true
+	default:
+		return false
+	}
+}
+
 // captureBodyFrom captures the AS body starting at current lexer position in the original input.
 // rawOffset is the byte offset in l.input where body content starts (after AS and optional whitespace).
 func captureBody(input string, startOffset int) (body string, endOffset int, err *ParseError) {
@@ -559,10 +598,17 @@ func captureBody(input string, startOffset int) (body string, endOffset int, err
 	}
 
 	// BEGIN ... END — skip strings/comments so END inside them is not a terminator.
+	// Also ignore END IF / END WHILE / … and CASE … END so they do not close BEGIN.
+	// Open IF/WHILE/FOR/LOOP/REPEAT without their END … leave the BEGIN unterminated.
 	upper := strings.ToUpper(input[i:])
 	if strings.HasPrefix(upper, "BEGIN") {
 		start := i
 		depth := 0
+		caseDepth := 0
+		var ctrl struct{ iff, while, loop, forLoop, repeat int }
+		ctrlOpen := func() bool {
+			return ctrl.iff > 0 || ctrl.while > 0 || ctrl.loop > 0 || ctrl.forLoop > 0 || ctrl.repeat > 0
+		}
 		for i < len(input) {
 			c := input[i]
 			if c == '\'' || c == '"' {
@@ -632,9 +678,63 @@ func captureBody(input string, startOffset int) (body string, endOffset int, err
 					i += size
 				}
 				w := strings.ToUpper(input[wordStart:i])
-				if w == "BEGIN" {
+				switch w {
+				case "BEGIN":
 					depth++
-				} else if w == "END" {
+				case "CASE":
+					caseDepth++
+				case "IF":
+					ctrl.iff++
+				case "WHILE":
+					ctrl.while++
+				case "LOOP":
+					ctrl.loop++
+				case "FOR":
+					ctrl.forLoop++
+				case "REPEAT":
+					ctrl.repeat++
+				case "END":
+					// END IF / END WHILE / END LOOP / END FOR / END CASE / END REPEAT
+					// close control structures, not the outer BEGIN.
+					if next, end := peekSQLKeyword(input, i); isBeginEndCloser(next) {
+						switch next {
+						case "IF":
+							if ctrl.iff > 0 {
+								ctrl.iff--
+							}
+						case "WHILE":
+							if ctrl.while > 0 {
+								ctrl.while--
+							}
+						case "LOOP":
+							if ctrl.loop > 0 {
+								ctrl.loop--
+							}
+						case "FOR":
+							if ctrl.forLoop > 0 {
+								ctrl.forLoop--
+							}
+						case "REPEAT":
+							if ctrl.repeat > 0 {
+								ctrl.repeat--
+							}
+						case "CASE":
+							if caseDepth > 0 {
+								caseDepth--
+							}
+						}
+						i = end
+						continue
+					}
+					if caseDepth > 0 {
+						caseDepth--
+						continue
+					}
+					// Bare END while IF/WHILE/… still open: do not close BEGIN
+					// (script is incomplete → unterminated BEGIN/END at EOF).
+					if ctrlOpen() {
+						continue
+					}
 					depth--
 					if depth == 0 {
 						j := i
