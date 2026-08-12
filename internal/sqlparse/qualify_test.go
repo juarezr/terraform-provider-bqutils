@@ -210,17 +210,17 @@ func TestQualifyBody_tvfCallInFrom(t *testing.T) {
 }
 
 func TestQualifyBody_hyphenatedProject(t *testing.T) {
-	body := `SELECT base1.array_distinct([1, 1, 2]) AS unique_items`
+	body := `SELECT mydataset2.fn1([1, 1, 2]) AS items`
 	got := QualifyBody(body, QualifyOptions{
-		TargetProject: "bigdatapoc-374615",
-		HomeDataset:   "appfleet",
+		TargetProject: "my-project-123",
+		HomeDataset:   "mydataset1",
 		Rewrite:       true,
 	})
-	want := "SELECT `bigdatapoc-374615`.`base1`.`array_distinct`([1, 1, 2]) AS unique_items"
+	want := "SELECT `my-project-123`.`mydataset2`.`fn1`([1, 1, 2]) AS items"
 	if got.Body != want {
 		t.Fatalf("body=%q want=%q", got.Body, want)
 	}
-	if strings.Contains(got.Body, "bigdatapoc-374615.base1") {
+	if strings.Contains(got.Body, "my-project-123.mydataset2") {
 		t.Fatalf("unquoted hyphenated project must not appear: %q", got.Body)
 	}
 }
@@ -251,5 +251,31 @@ func TestQualifyBody_informationSchema(t *testing.T) {
 	}
 	if !strings.Contains(got.Body, "`env-proj`.`mydataset2`.INFORMATION_SCHEMA.TABLES") {
 		t.Fatalf("body=%q", got.Body)
+	}
+}
+
+func TestQualifyBody_extractFromNotTable(t *testing.T) {
+	// EXTRACT(part FROM expr) must not treat FROM as a table clause.
+	body := `SELECT
+  EXTRACT(DAYOFWEEK FROM t1.col1) AS dow,
+  EXTRACT(DATE FROM TIMESTAMP(t1.col1)) AS d
+FROM mydataset2.table1 AS t1
+WHERE EXTRACT(DAYOFWEEK FROM t1.col1) * 100 + t2.col2 BETWEEN 1 AND 7`
+	got := QualifyBody(body, QualifyOptions{
+		TargetProject: "my-project-123",
+		HomeDataset:   "mydataset1",
+		Rewrite:       true,
+	})
+	if !reflect.DeepEqual(got.DatasetReferences, []string{"mydataset2"}) {
+		t.Fatalf("refs=%v want=[mydataset2] (t1.col1 is alias.column, not a dataset)", got.DatasetReferences)
+	}
+	if strings.Contains(got.Body, "`t1`.`col1`") || strings.Contains(got.Body, "my-project-123`.`t1`") {
+		t.Fatalf("EXTRACT operand must not be project-qualified: %q", got.Body)
+	}
+	if !strings.Contains(got.Body, "EXTRACT(DAYOFWEEK FROM t1.col1)") {
+		t.Fatalf("EXTRACT expression altered: %q", got.Body)
+	}
+	if !strings.Contains(got.Body, "`my-project-123`.`mydataset2`.`table1`") {
+		t.Fatalf("real FROM table not qualified: %q", got.Body)
 	}
 }

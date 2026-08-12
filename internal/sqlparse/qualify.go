@@ -100,7 +100,7 @@ func rewriteTwoPartRefs(body string, refs []bodyRef, opts QualifyOptions) string
 
 func formatQualifiedRef(project string, r bodyRef) string {
 	// Always backtick-quote each segment. Unquoted project IDs with hyphens
-	// (e.g. bigdatapoc-374615) are invalid SQL for the Routines API.
+	// (e.g. my-project-123) are invalid SQL for the Routines API.
 	if r.infoSchema {
 		// dataset.INFORMATION_SCHEMA.object → `project`.`dataset`.INFORMATION_SCHEMA.object
 		return "`" + project + "`." + "`" + r.dataset + "`." + r.object
@@ -111,6 +111,9 @@ func formatQualifiedRef(project string, r bodyRef) string {
 func findBodyRefs(s string) []bodyRef {
 	var refs []bodyRef
 	expectRef := false
+	pendingExtract := false
+	parenDepth := 0
+	var extractDepths []int // paren depths of open EXTRACT( ... ) args
 	i := 0
 	for i < len(s) {
 		// Whitespace
@@ -129,12 +132,14 @@ func findBodyRefs(s string) []bodyRef {
 		}
 		// String literals
 		if s[i] == '\'' || s[i] == '"' {
+			pendingExtract = false
 			i = consumeQuoted(s, i, nil)
 			continue
 		}
 
 		// Backtick-qualified name
 		if s[i] == '`' {
+			pendingExtract = false
 			ref, next, ok := tryParseDottedRef(s, i)
 			if ok {
 				i = consumeRefOrSkip(s, ref, next, &expectRef, &refs)
@@ -152,6 +157,7 @@ func findBodyRefs(s string) []bodyRef {
 
 			// Dotted name or project.dataset.object starting here
 			if j < len(s) && s[j] == '.' {
+				pendingExtract = false
 				ref, end, ok := tryParseDottedRef(s, i)
 				if ok {
 					i = consumeRefOrSkip(s, ref, end, &expectRef, &refs)
@@ -160,23 +166,42 @@ func findBodyRefs(s string) []bodyRef {
 			}
 
 			switch upper {
-			case "FROM", "JOIN", "INTO", "UPDATE", "USING", "CALL", "MERGE", "DELETE", "TRUNCATE":
+			case "EXTRACT":
+				// EXTRACT(part FROM expr) — FROM here is not a table clause.
+				pendingExtract = true
+				i = next
+				continue
+			case "FROM":
+				if inExtractArgs(extractDepths, parenDepth) {
+					i = next
+					continue
+				}
+				pendingExtract = false
+				expectRef = true
+				i = next
+				continue
+			case "JOIN", "INTO", "UPDATE", "USING", "CALL", "MERGE", "DELETE", "TRUNCATE":
+				pendingExtract = false
 				expectRef = true
 				i = next
 				continue
 			case "TABLE":
 				// Keep expectRef from TRUNCATE TABLE ...
+				pendingExtract = false
 				i = next
 				continue
 			case "UNNEST":
+				pendingExtract = false
 				expectRef = false
 				i = next
 				continue
 			case "WITH":
+				pendingExtract = false
 				expectRef = false
 				i = next
 				continue
 			case "ON", "WHERE", "GROUP", "ORDER", "LIMIT", "HAVING", "SET", "VALUES":
+				pendingExtract = false
 				expectRef = false
 				i = next
 				continue
@@ -185,10 +210,12 @@ func findBodyRefs(s string) []bodyRef {
 				"ELSEIF", "LOOP", "WHILE", "DO", "FOR", "IN", "WHEN", "AND", "OR", "NOT",
 				"UNION", "INTERSECT", "EXCEPT", "QUALIFY", "WINDOW", "TRUE", "FALSE",
 				"NULL", "CASE", "MATCHED", "INSERT":
+				pendingExtract = false
 				i = next
 				continue
 			}
 
+			pendingExtract = false
 			// Single-ident relation (CTE / unqualified table) in table-ref context
 			if expectRef {
 				i = next
@@ -210,12 +237,44 @@ func findBodyRefs(s string) []bodyRef {
 			i++
 			continue
 		}
-		if s[i] == '(' || s[i] == ')' || s[i] == ';' {
+		if s[i] == '(' {
+			parenDepth++
+			if pendingExtract {
+				extractDepths = append(extractDepths, parenDepth)
+				pendingExtract = false
+			}
 			expectRef = false
+			i++
+			continue
+		}
+		if s[i] == ')' {
+			if n := len(extractDepths); n > 0 && extractDepths[n-1] == parenDepth {
+				extractDepths = extractDepths[:n-1]
+			}
+			if parenDepth > 0 {
+				parenDepth--
+			}
+			expectRef = false
+			pendingExtract = false
+			i++
+			continue
+		}
+		if s[i] == ';' {
+			expectRef = false
+			pendingExtract = false
 		}
 		i++
 	}
 	return refs
+}
+
+func inExtractArgs(extractDepths []int, parenDepth int) bool {
+	for _, d := range extractDepths {
+		if parenDepth >= d {
+			return true
+		}
+	}
+	return false
 }
 
 // consumeRefOrSkip records a multi-part ref when in table context or a call, then advances.
