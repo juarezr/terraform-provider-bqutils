@@ -1,5 +1,13 @@
 # terraform-provider-bqutils
 
+![GitHub branch status](https://img.shields.io/github/checks-status/juarezr/terraform-provider-bqutils/main?logo=github)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/juarezr/terraform-provider-bqutils/test.yml?logo=github)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/juarezr/terraform-provider-bqutils/release.yml?label=release&logo=github)
+
+![Terraform Provider Downloads](https://img.shields.io/terraform/provider/dm/2159426?label=registry.terraform.io&link=https%3A%2F%2Fregistry.terraform.io%2Fproviders%2Fjuarezr%2Fbqutils%2Flatest%2Fdocs&logo=terraform&logoColor=FFF)
+![OpenTofu Registry](https://img.shields.io/badge/OpenTofu_Registry-search.opentofu.org-blue?logo=opentofu&logoColor=FFF)
+![GitHub Sponsors](https://img.shields.io/github/sponsors/juarezr?label=Sponsor%20this%20project&logo=githubsponsors&logoColor=FFF)
+
 Terraform [provider](https://registry.terraform.io/providers/juarezr/bqutils/latest/docs) that automates the creation and update of BigQuery functions/procedures/views by parsing `CREATE` SQL statements stored in SQL Scripts and connecting with the resources the [`hashicorp/google`](https://registry.terraform.io/providers/hashicorp/google/latest) provider for object creation.
 
 ## Requirements
@@ -22,7 +30,7 @@ terraform {
   required_providers {
     bqutils = {
       source  = "juarezr/bqutils"
-      version = ">= 0.5"
+      version = ">= 0.6"
     }
   }
 }
