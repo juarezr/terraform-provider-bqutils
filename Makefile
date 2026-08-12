@@ -34,8 +34,7 @@ define COVERAGE_REPORT_TEXT
 endef
 export COVERAGE_REPORT_TEXT
 
-.PHONY: coverage-report
-coverage-report:
+coverage.md: coverage
 	go tool cover -func=cover.out -o coverage.log
 	echo "$${COVERAGE_REPORT_TEXT}" > coverage.md
 	cat coverage.log | sed -E -e 's/^total/total:average/' -e 's/[:\t]+/ | /g' -e 's/.*/| & |/' >> coverage.md
@@ -106,10 +105,10 @@ verify:
 
 .PHONY: outdated
 outdated:
-	go list -m -u all
+	go list -m -u
 
 .PHONY: upgrade
-update:
-	go get -u all
+upgrade:
+	go get -u
 	go mod tidy
 	go mod verify

@@ -125,7 +125,7 @@ func TestAccRoutineParser_aggregateNotAggregate(t *testing.T) {
 				Config: `
 					data "bqutils_routine_parser" "test" {
 					sql = <<-EOF
-						CREATE AGGREGATE FUNCTION appfleet.weighted_sum
+						CREATE AGGREGATE FUNCTION mydataset1.weighted_sum
 						(
 						dividend FLOAT64,
 						divisor FLOAT64 NOT AGGREGATE
@@ -136,12 +136,90 @@ func TestAccRoutineParser_aggregateNotAggregate(t *testing.T) {
 					}`,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_id", "weighted_sum"),
-					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_id", "appfleet"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_id", "mydataset1"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_type", "AGGREGATE_FUNCTION"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "arguments.0.name", "dividend"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "arguments.0.is_aggregate", "true"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "arguments.1.name", "divisor"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "arguments.1.is_aggregate", "false"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccRoutineParser_targetProjectRewrite(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: `
+					data "bqutils_routine_parser" "test" {
+						target_project = "env-proj"
+						sql = <<-EOF
+							CREATE OR REPLACE TABLE FUNCTION mydataset1.test_array_distinct(
+								max_value INT64
+							) AS (
+								SELECT mydataset2.array_distinct([1, 1, 2]) AS unique_items
+							);
+						EOF
+					}`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "routine_id", "test_array_distinct"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_id", "mydataset1"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_references.#", "1"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_references.0", "mydataset2"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "definition_body", "SELECT `env-proj`.`mydataset2`.`array_distinct`([1, 1, 2]) AS unique_items"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccRoutineParser_inferTargetProjectFromCreateName(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: `
+					data "bqutils_routine_parser" "test" {
+						sql = <<-EOF
+							CREATE FUNCTION ` + "`myproj.mydataset1.fn`" + `(x INT64)
+							RETURNS INT64
+							AS (mydataset2.add_one(x));
+						EOF
+					}`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "project", "myproj"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_references.0", "mydataset2"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "definition_body", "`myproj`.`mydataset2`.`add_one`(x)"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccViewParser_datasetReferences(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: `
+					data "bqutils_view_parser" "test" {
+						sql = <<-EOF
+							CREATE OR REPLACE VIEW mydataset1.view_mytable AS
+							SELECT e1.kind, e2.class, e1.name
+							FROM mydataset2.eventkind AS e1
+							JOIN mydataset3.eventclass AS t2 ON e1.id = t2.id;
+						EOF
+					}`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "table_id", "view_mytable"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "dataset_references.#", "2"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "dataset_references.0", "mydataset2"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "dataset_references.1", "mydataset3"),
+					resource.TestMatchResourceAttr("data.bqutils_view_parser.test", "query", regexp.MustCompile(`FROM mydataset2\.eventkind`)),
+					resource.TestMatchResourceAttr("data.bqutils_view_parser.test", "query", regexp.MustCompile(`JOIN mydataset3\.eventclass`)),
 				),
 			},
 		},

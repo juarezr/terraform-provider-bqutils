@@ -175,8 +175,8 @@ func (l *lexer) scanAll() {
 				lit := l.scanIdent()
 				kind := keywordKind(lit)
 				l.tokens = append(l.tokens, token{kind: kind, lit: lit, line: line, col: col, offset: off})
-				// Stop header lexing at AS — body is captured from raw input later.
-				if kind == tokAs {
+				// Stop header lexing at AS / BEGIN — body is captured from raw input later.
+				if kind == tokAs || kind == tokBegin {
 					l.tokens = append(l.tokens, token{kind: tokEOF, line: l.line, col: l.col, offset: l.pos})
 					return
 				}
@@ -248,11 +248,19 @@ func isIdentStart(r rune) bool {
 }
 
 func isIdentPart(r rune) bool {
-	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '$'
+	// Include '@' so BigQuery system vars (@@project_id) and @params scan as one token
+	// and never zero-width-loop in scanIdent.
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '$' || r == '@'
 }
 
 func (l *lexer) scanIdent() string {
 	start := l.pos
+	// Always consume the start rune (caller guarantees isIdentStart). This prevents
+	// infinite loops if isIdentStart and isIdentPart ever disagree again.
+	if l.pos < len(l.input) {
+		_, size := utf8.DecodeRuneInString(l.input[l.pos:])
+		l.advance(size)
+	}
 	for l.pos < len(l.input) {
 		r, size := utf8.DecodeRuneInString(l.input[l.pos:])
 		if !isIdentPart(r) {
@@ -428,274 +436,33 @@ func keywordKind(lit string) int {
 	}
 }
 
-// captureBodyFrom captures the AS body starting at current lexer position in the original input.
-// rawOffset is the byte offset in l.input where body content starts (after AS and optional whitespace).
-func captureBody(input string, startOffset int) (body string, endOffset int, err *ParseError) {
-	// skip spaces
-	i := startOffset
-	line, col := 1, 1
-	for j := 0; j < startOffset && j < len(input); j++ {
-		if input[j] == '\n' {
-			line++
-			col = 1
-		} else {
-			col++
-		}
-	}
-	for i < len(input) && (input[i] == ' ' || input[i] == '\t' || input[i] == '\n' || input[i] == '\r') {
-		if input[i] == '\n' {
-			line++
-			col = 1
-		} else {
-			col++
-		}
+// peekSQLKeyword skips whitespace and returns the next SQL keyword/ident (uppercased)
+// and the offset after it. Empty next means no word.
+func peekSQLKeyword(input string, i int) (next string, end int) {
+	for i < len(input) && unicode.IsSpace(rune(input[i])) {
 		i++
 	}
-	if i >= len(input) {
-		return "", i, &ParseError{Message: "expected body after AS", Line: line, Column: col, Offset: i}
+	if i >= len(input) || !isIdentStart(rune(input[i])) {
+		return "", i
 	}
-
-	// Parenthesized SQL body: ( ... )
-	if input[i] == '(' {
-		depth := 0
-		start := i
-		inStr := byte(0)
-		triple := false
-		for i < len(input) {
-			c := input[i]
-			if inStr != 0 {
-				if triple {
-					if i+2 < len(input) && input[i] == inStr && input[i+1] == inStr && input[i+2] == inStr {
-						i += 3
-						inStr = 0
-						triple = false
-						continue
-					}
-					i++
-					continue
-				}
-				if c == '\\' && i+1 < len(input) {
-					i += 2
-					continue
-				}
-				if c == inStr {
-					inStr = 0
-				}
-				i++
-				continue
-			}
-			if c == '\'' || c == '"' {
-				if i+2 < len(input) && input[i+1] == c && input[i+2] == c {
-					inStr = c
-					triple = true
-					i += 3
-					continue
-				}
-				inStr = c
-				i++
-				continue
-			}
-			if c == '(' {
-				depth++
-			} else if c == ')' {
-				depth--
-				if depth == 0 {
-					i++
-					// Content inside parens, excluding outer parens. Do not
-					// TrimSpace here so TrimIndentation can see common indent
-					// on every line (including the first). TrimBody handles
-					// leading/trailing whitespace when enabled.
-					return input[start+1 : i-1], i, nil
-				}
-			} else if c == '-' && i+1 < len(input) && input[i+1] == '-' {
-				i += 2
-				for i < len(input) && input[i] != '\n' {
-					i++
-				}
-				continue
-			}
-			i++
-		}
-		return "", i, &ParseError{Message: "unterminated body parentheses", Line: line, Column: col, Offset: start}
-	}
-
-	// Raw / triple string body (r""" / r''' / R""" …), allowing whitespace after r/R.
-	if input[i] == 'r' || input[i] == 'R' {
-		j := i + 1
-		for j < len(input) && (input[j] == ' ' || input[j] == '\t') {
-			j++
-		}
-		if j+2 < len(input) {
-			if (input[j] == '"' && input[j+1] == '"' && input[j+2] == '"') ||
-				(input[j] == '\'' && input[j+1] == '\'' && input[j+2] == '\'') {
-				quote := input[j : j+3]
-				j += 3
-				start := j
-				for j+2 < len(input) {
-					if input[j:j+3] == quote {
-						return input[start:j], j + 3, nil
-					}
-					j++
-				}
-				return "", j, &ParseError{Message: "unterminated raw string body", Line: line, Column: col, Offset: startOffset}
-			}
-		}
-	}
-	if i+2 < len(input) {
-		if input[i:i+3] == "\"\"\"" || input[i:i+3] == "'''" {
-			quote := input[i : i+3]
-			i += 3
-			start := i
-			for i+2 < len(input) {
-				if input[i:i+3] == quote {
-					body := input[start:i]
-					i += 3
-					return body, i, nil
-				}
-				i++
-			}
-			return "", i, &ParseError{Message: "unterminated string body", Line: line, Column: col, Offset: startOffset}
-		}
-	}
-
-	// BEGIN ... END — skip strings/comments so END inside them is not a terminator.
-	upper := strings.ToUpper(input[i:])
-	if strings.HasPrefix(upper, "BEGIN") {
-		start := i
-		depth := 0
-		for i < len(input) {
-			c := input[i]
-			if c == '\'' || c == '"' {
-				if i+2 < len(input) && input[i+1] == c && input[i+2] == c {
-					q := c
-					i += 3
-					for i+2 < len(input) {
-						if input[i] == q && input[i+1] == q && input[i+2] == q {
-							i += 3
-							break
-						}
-						i++
-					}
-					continue
-				}
-				q := c
-				i++
-				for i < len(input) {
-					if input[i] == '\\' && i+1 < len(input) {
-						i += 2
-						continue
-					}
-					if input[i] == q {
-						i++
-						break
-					}
-					i++
-				}
-				continue
-			}
-			if c == '`' {
-				i++
-				for i < len(input) && input[i] != '`' {
-					i++
-				}
-				if i < len(input) {
-					i++
-				}
-				continue
-			}
-			if c == '-' && i+1 < len(input) && input[i+1] == '-' {
-				i += 2
-				for i < len(input) && input[i] != '\n' {
-					i++
-				}
-				continue
-			}
-			if c == '/' && i+1 < len(input) && input[i+1] == '*' {
-				i += 2
-				for i+1 < len(input) && !(input[i] == '*' && input[i+1] == '/') {
-					i++
-				}
-				if i+1 < len(input) {
-					i += 2
-				}
-				continue
-			}
-			if isIdentStart(rune(c)) {
-				wordStart := i
-				r, size := utf8.DecodeRuneInString(input[i:])
-				i += size
-				for i < len(input) {
-					r, size = utf8.DecodeRuneInString(input[i:])
-					if !isIdentPart(r) {
-						break
-					}
-					i += size
-				}
-				w := strings.ToUpper(input[wordStart:i])
-				if w == "BEGIN" {
-					depth++
-				} else if w == "END" {
-					depth--
-					if depth == 0 {
-						j := i
-						for j < len(input) && unicode.IsSpace(rune(input[j])) {
-							j++
-						}
-						if j < len(input) && input[j] == ';' {
-							j++
-						}
-						// Preserve leading indent for TrimIndentation; TrimBody cleans edges.
-						return input[start:i], j, nil
-					}
-				}
-				continue
-			}
-			i++
-		}
-		return "", i, &ParseError{Message: "unterminated BEGIN/END body", Line: line, Column: col, Offset: start}
-	}
-
-	// View-style: rest until semicolon (not inside strings).
 	start := i
-	// Rewind past horizontal whitespace so the first line keeps its indent
-	// for TrimIndentation (the scanner above skipped it to find content).
-	for start > 0 && (input[start-1] == ' ' || input[start-1] == '\t') {
-		start--
-	}
-	inStr := byte(0)
+	r, size := utf8.DecodeRuneInString(input[i:])
+	i += size
 	for i < len(input) {
-		c := input[i]
-		if inStr != 0 {
-			if c == '\\' && i+1 < len(input) {
-				i += 2
-				continue
-			}
-			if c == inStr {
-				inStr = 0
-			}
-			i++
-			continue
+		r, size = utf8.DecodeRuneInString(input[i:])
+		if !isIdentPart(r) {
+			break
 		}
-		if c == '\'' || c == '"' {
-			inStr = c
-			i++
-			continue
-		}
-		if c == '`' {
-			i++
-			for i < len(input) && input[i] != '`' {
-				i++
-			}
-			if i < len(input) {
-				i++
-			}
-			continue
-		}
-		if c == ';' {
-			// Preserve leading indent for TrimIndentation; TrimBody cleans edges.
-			return input[start:i], i + 1, nil
-		}
-		i++
+		i += size
 	}
-	return input[start:], i, nil
+	return strings.ToUpper(input[start:i]), i
+}
+
+func isBeginEndCloser(word string) bool {
+	switch word {
+	case "IF", "WHILE", "LOOP", "FOR", "CASE", "REPEAT":
+		return true
+	default:
+		return false
+	}
 }

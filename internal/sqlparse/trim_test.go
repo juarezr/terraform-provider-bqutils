@@ -128,6 +128,17 @@ func TestTrimComments(t *testing.T) {
 	}
 }
 
+func TestTrimComments_preservesBackticks(t *testing.T) {
+	in := "SELECT `col` -- comment\nFROM `mydataset.src`"
+	got := TrimComments(in)
+	if strings.Contains(got, "-- comment") {
+		t.Fatalf("comment not removed: %q", got)
+	}
+	if !strings.Contains(got, "`col`") || !strings.Contains(got, "`mydataset.src`") {
+		t.Fatalf("backticks altered: %q", got)
+	}
+}
+
 const listPartitionsSQLWithComment = `
     CREATE OR REPLACE TABLE FUNCTION mydataset.list_partitions
     (

@@ -82,79 +82,25 @@ func TrimComments(s string) string {
 	var b strings.Builder
 	i := 0
 	for i < len(s) {
-		// strings
 		if s[i] == '\'' || s[i] == '"' {
-			q := s[i]
-			b.WriteByte(q)
-			i++
-			if i+1 < len(s) && s[i] == q && s[i+1] == q {
-				// triple
-				b.WriteByte(q)
-				b.WriteByte(q)
-				i += 2
-				for i+2 < len(s) {
-					if s[i] == q && s[i+1] == q && s[i+2] == q {
-						b.WriteByte(q)
-						b.WriteByte(q)
-						b.WriteByte(q)
-						i += 3
-						break
-					}
-					b.WriteByte(s[i])
-					i++
-				}
-				continue
-			}
-			for i < len(s) {
-				if s[i] == '\\' && i+1 < len(s) {
-					b.WriteByte(s[i])
-					b.WriteByte(s[i+1])
-					i += 2
-					continue
-				}
-				b.WriteByte(s[i])
-				if s[i] == q {
-					i++
-					break
-				}
-				i++
-			}
+			i = consumeQuoted(s, i, &b)
 			continue
 		}
 		if s[i] == '`' {
-			b.WriteByte('`')
-			i++
-			for i < len(s) && s[i] != '`' {
-				b.WriteByte(s[i])
-				i++
-			}
-			if i < len(s) {
-				b.WriteByte('`')
-				i++
-			}
+			i = consumeBacktick(s, i, &b)
 			continue
 		}
 		if s[i] == '-' && i+1 < len(s) && s[i+1] == '-' {
-			i += 2
-			for i < len(s) && s[i] != '\n' {
-				i++
-			}
+			i = consumeLineComment(s, i)
 			continue
 		}
 		if s[i] == '/' && i+1 < len(s) && s[i+1] == '*' {
-			i += 2
-			for i+1 < len(s) && !(s[i] == '*' && s[i+1] == '/') {
-				i++
-			}
-			if i+1 < len(s) {
-				i += 2
-			}
+			i = consumeBlockComment(s, i)
 			continue
 		}
 		b.WriteByte(s[i])
 		i++
 	}
-	// collapse leftover trailing spaces on lines lightly
 	return b.String()
 }
 

@@ -2,6 +2,8 @@
 data "bqutils_routine_parser" "list_tables" {
   sql = file("${path.module}/mydataset.list_tables.sql")
 
+  target_project = data.google_bigquery_dataset.mydataset1.project
+
   trim_body = true
 }
 
@@ -10,13 +12,9 @@ data "google_bigquery_dataset" "mydataset1" {
   dataset_id = "mydataset1"
 }
 
-# Gets the BigQuery dataset where the routine reads from (authorize the routine on this dataset).
-data "google_bigquery_dataset" "mydataset2" {
-  dataset_id = "mydataset2"
-}
-
 # Create the routine in BigQuery using the attributes parsed from the SQL file.
 resource "google_bigquery_routine" "list_tables" {
+  project    = data.google_bigquery_dataset.mydataset1.project
   dataset_id = data.google_bigquery_dataset.mydataset1.dataset_id
 
   routine_id   = data.bqutils_routine_parser.list_tables.routine_id
@@ -36,11 +34,12 @@ resource "google_bigquery_routine" "list_tables" {
   definition_body = data.bqutils_routine_parser.list_tables.definition_body
 }
 
-# Grant authorized-routine access on mydataset2 after the routine is created/modified
-# The lifecycle block triggers modification when the routine SQL content changes in
-# the previous google_bigquery_routine resource.
+# Grant authorized-routine access on each foreign dataset referenced in the SQL body.
+# dataset_references is empty when the body only uses the routine's own dataset.
 resource "google_bigquery_dataset_access" "list_tables" {
-  dataset_id = data.google_bigquery_dataset.mydataset2.dataset_id
+  for_each = toset(data.bqutils_routine_parser.list_tables.dataset_references)
+
+  dataset_id = each.key
 
   routine {
     project_id = google_bigquery_routine.list_tables.project
@@ -58,7 +57,6 @@ resource "google_bigquery_dataset_access" "list_tables" {
 
   depends_on = [
     data.google_bigquery_dataset.mydataset1,
-    data.google_bigquery_dataset.mydataset2,
     data.bqutils_routine_parser.list_tables
   ]
 }

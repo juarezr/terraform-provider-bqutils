@@ -40,4 +40,16 @@ The Terraform code to create the VIEW is:
 
 {{ tffile "examples/data-sources/bqutils_view_parser/data-source.materialized.tf" }}
 
+### Applying access permissions to views by using BigQuery authorized views
+
+Cross-dataset views often need [authorized view](https://cloud.google.com/bigquery/docs/authorized-views) grants on the source datasets. Use `dataset_references` with `for_each` on [google_bigquery_dataset_access](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_dataset_access). Unlike routines, view `query` bodies are not rewritten (the Tables API does not require Routines-style project qualification).
+
+Example SQL:
+
+{{ codefile "sql" "examples/data-sources/bqutils_view_parser/mydataset1.view_mytable.sql" }}
+
+Terraform:
+
+{{ tffile "examples/data-sources/bqutils_view_parser/data-source.authorized_view.tf" }}
+
 {{ .SchemaMarkdown | trimspace }}

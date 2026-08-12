@@ -44,12 +44,26 @@ When Terraform updates a BigQuery routine, any authorized-routine grants on othe
 
 To keep access on the routine, use a [google_bigquery_dataset_access](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_dataset_access) resource and configure its `lifecycle.replace_triggered_by` argument so that when the routine body, return type, or arguments are modified, Terraform also reapplies the routine grants.
 
+Use `dataset_references` with `for_each` so every foreign dataset named in the SQL body receives an authorized-routine grant. The list is empty when the body only references the routine's own dataset.
+
 Example SQL file to create a routine (placed next to the Terraform code):
 
 {{ codefile "sql" "examples/data-sources/bqutils_routine_parser/mydataset.list_tables.sql" }}
 
-Terraform code that creates the routine and grants access to the dataset:
+Terraform code that creates the routine and grants access on each referenced dataset:
 
 {{ tffile "examples/data-sources/bqutils_routine_parser/data-source.authorized_routine.tf" }}
+
+### Qualifying multi-dataset references for the Routines API
+
+BigQuery's Routines API requires project-qualified entity references inside SQL routine bodies (unlike running `CREATE OR REPLACE` as a query job in Studio/Web console/bq CLI). Keep Studio-friendly SQL with `dataset.table` / `dataset.fn` names, set `target_project`, and use the rewritten `definition_body`.
+
+Example SQL:
+
+{{ codefile "sql" "examples/data-sources/bqutils_routine_parser/mydataset1.test_array_distinct.sql" }}
+
+Terraform that injects the project and grants authorized-routine access from `dataset_references`:
+
+{{ tffile "examples/data-sources/bqutils_routine_parser/data-source.multi_dataset.tf" }}
 
 {{ .SchemaMarkdown | trimspace }}
