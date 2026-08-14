@@ -44,7 +44,7 @@ func (k nodeKey) String() string {
 	return k.dataset + "." + k.object
 }
 
-// ComputeLayers assigns topo-sort waves (layers) to managed objects.
+// ComputeLayers assigns topo-sort stages (layers) to managed objects.
 // Unknown and INFORMATION_SCHEMA edges are dropped. Cycles and duplicate/empty
 // node ids return an error.
 func ComputeLayers(sources []SourceNode) (LayerResult, error) {
@@ -102,16 +102,16 @@ func ComputeLayers(sources []SourceNode) (LayerResult, error) {
 	remaining := len(nodes)
 	layer := 0
 	for remaining > 0 {
-		var wave []nodeKey
+		var stage []nodeKey
 		for _, k := range order {
 			if _, ok := nodes[k]; !ok {
 				continue
 			}
 			if indegree[k] == 0 {
-				wave = append(wave, k)
+				stage = append(stage, k)
 			}
 		}
-		if len(wave) == 0 {
+		if len(stage) == 0 {
 			var cycle []string
 			for _, k := range order {
 				if _, ok := nodes[k]; ok {
@@ -121,14 +121,14 @@ func ComputeLayers(sources []SourceNode) (LayerResult, error) {
 			sort.Strings(cycle)
 			return LayerResult{}, fmt.Errorf("cyclic dependency among: %s", strings.Join(cycle, ", "))
 		}
-		sort.Slice(wave, func(i, j int) bool {
-			if wave[i].dataset != wave[j].dataset {
-				return wave[i].dataset < wave[j].dataset
+		sort.Slice(stage, func(i, j int) bool {
+			if stage[i].dataset != stage[j].dataset {
+				return stage[i].dataset < stage[j].dataset
 			}
-			return wave[i].object < wave[j].object
+			return stage[i].object < stage[j].object
 		})
 		layer++
-		for _, k := range wave {
+		for _, k := range stage {
 			n := nodes[k]
 			layered = append(layered, LayeredNode{
 				Layer:        layer,
