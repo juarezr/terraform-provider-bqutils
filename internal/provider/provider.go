@@ -50,6 +50,7 @@ func (p *BqutilsProvider) Schema(_ context.Context, _ provider.SchemaRequest, re
 }
 
 func (p *BqutilsProvider) Configure(_ context.Context, _ provider.ConfigureRequest, _ *provider.ConfigureResponse) {
+	// does not need coverage reporting
 }
 
 func (p *BqutilsProvider) Resources(_ context.Context) []func() resource.Resource {
