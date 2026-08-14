@@ -13,6 +13,7 @@ Parses a BigQuery `CREATE VIEW` or `CREATE MATERIALIZED VIEW` SQL statement and 
 
 - The datasource can handle the `CREATE VIEW` and the `CREATE MATERIALIZED VIEW` SQL statements.
 - Unmappable `OPTIONS` (for example `retain_partitions`) from the SQL statement are ignored.
+- The computed `references` attribute lists dataset-qualified objects used in the query (for creation-order layering with [bqutils_dependency_layering](dependency_layering)). Call-site parsing cannot tell tables from views or scalar from aggregate functions.
 
 ## Example Usage
 

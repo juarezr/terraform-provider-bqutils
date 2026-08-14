@@ -13,6 +13,7 @@ Parses a BigQuery `CREATE FUNCTION` or `CREATE PROCEDURE` SQL statement and expo
 
 - The datasource can handle the `CREATE FUNCTION`, `CREATE TABLE FUNCTION`, `CREATE PROCEDURE`, or `CREATE AGGREGATE FUNCTION` SQL statements.
 - A `CREATE TEMPORARY FUNCTION` SQL statement will produce an error because they cannot be managed as persistent BigQuery objects.
+- The computed `references` attribute lists dataset-qualified objects used in the body (for creation-order layering with [bqutils_dependency_layering](dependency_layering)). Call-site parsing cannot tell tables from views or scalar from aggregate functions.
 
 ## Example Usage
 
