@@ -13,6 +13,7 @@ Parses a BigQuery `CREATE FUNCTION` or `CREATE PROCEDURE` SQL statement and expo
 
 - The datasource can handle the `CREATE FUNCTION`, `CREATE TABLE FUNCTION`, `CREATE PROCEDURE`, or `CREATE AGGREGATE FUNCTION` SQL statements.
 - A `CREATE TEMPORARY FUNCTION` SQL statement will produce an error because they cannot be managed as persistent BigQuery objects.
+- The computed `references` attribute lists dataset-qualified objects used in the body (for creation-order layering with [bqutils_dependency_layering](dependency_layering)). Call-site parsing cannot tell tables from views or scalar from aggregate functions.
 
 ## Example Usage
 
@@ -381,6 +382,7 @@ resource "google_bigquery_dataset_access" "test_array_distinct" {
 - `language` (String) The language of the routine. Possible values: SQL, JAVASCRIPT, PYTHON, JAVA, SCALA.
 - `project` (String) Project parsed from a three-part name, if present.
 - `python_options` (Attributes) Python UDF options when present (maps to google_bigquery_routine.python_options). (see [below for nested schema](#nestedatt--python_options))
+- `references` (Attributes List) Objects referenced in definition_body (routines, views, tables), unique and sorted by dataset_id then object_id. Excludes self-references. Use with bqutils_dependency_layering for creation-order waves. (see [below for nested schema](#nestedatt--references))
 - `remote_function_options` (Attributes) Remote function options when present (maps to google_bigquery_routine.remote_function_options). (see [below for nested schema](#nestedatt--remote_function_options))
 - `return_table_type` (String) JSON for RETURNS TABLE<...> when present (table-valued functions).
 - `return_type` (String) StandardSqlDataType as JSON schema for the function return type when present.
@@ -420,6 +422,17 @@ Read-Only:
 
 - `entry_point` (String) Python entry point function name.
 - `packages` (List of String) Python packages to install.
+
+
+<a id="nestedatt--references"></a>
+### Nested Schema for `references`
+
+Read-Only:
+
+- `dataset_id` (String) Dataset ID of the referenced object (no backticks).
+- `object_id` (String) Object ID (routine, view, or table name; no backticks).
+- `object_type` (String) SCALAR_FUNCTION, TABLE_VALUED_FUNCTION, PROCEDURE, VIEW, or TABLE (INFORMATION_SCHEMA only). Call-site limits apply: VIEW may include tables/materialized views; SCALAR_FUNCTION may include aggregates.
+- `resource_type` (String) ROUTINE or VIEW, derived from object_type for Terraform resource selection.
 
 
 <a id="nestedatt--remote_function_options"></a>
