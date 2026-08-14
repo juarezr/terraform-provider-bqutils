@@ -5,15 +5,18 @@
 *.so
 *.dylib
 
+# Build artifacts
+build/
+
 # Test binary, built with `go test -c`
 *.test
 
 # Code coverage profiles and other test artifacts
 *.out
+*.cov
 *.cover
-coverage.*
 *.coverprofile
-profile.cov
+coverage*.*
 
 # Dependency directories
 # vendor/
