@@ -46,7 +46,9 @@ Using the data sources in this provider you can get the following benefits:
 - Combine with other Terraform resources to accomplish even more automation, such as:
   - Granting access to the routines/views to other datasets using the [google_bigquery_dataset_access](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_dataset_access) resource.
   - Manage BigQuery routines/views IAM permissions with the [google_bigquery_routine_iam_member](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_routine_iam_member), and [google_bigquery_table_iam_member](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_table_iam_member) resources.
-- Avoid the burden of keeping track of routines/views dependencies and creation order. Use the `bqutils_dependency_layering` data source to get the creation order in layers/waves and assign them to the Google resources in the Terraform code.
+- Avoid the burden of keeping track of routines/views dependencies and creation order.
+  - Use the `bqutils_dependency_layering` data source to get the creation order in layers/stages.
+  - Assign the correct order of creation of the objects computed by the datasource to layered stages using the Google resources in the Terraform code.
 
 ### Code maintainability gains
 

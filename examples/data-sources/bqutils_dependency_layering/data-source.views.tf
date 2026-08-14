@@ -2,6 +2,7 @@ locals {
   view_files = toset([
     "mydataset1.myview1.sql",
     "mydataset1.myview2.sql",
+    "mydataset1.myview3.sql",
   ])
 }
 
@@ -30,13 +31,18 @@ locals {
 
   views_l1 = {
     for o in local.layered :
-    "${o.dataset_id}.${o.object_id}" => data.bqutils_view_parser.all["${o.dataset_id}.${o.object_id}"]
+    o.reference_id => data.bqutils_view_parser.all[o.reference_id]
     if o.layer == 1
   }
   views_l2 = {
     for o in local.layered :
-    "${o.dataset_id}.${o.object_id}" => data.bqutils_view_parser.all["${o.dataset_id}.${o.object_id}"]
+    o.reference_id => data.bqutils_view_parser.all[o.reference_id]
     if o.layer == 2
+  }
+  views_l3 = {
+    for o in local.layered :
+    o.reference_id => data.bqutils_view_parser.all[o.reference_id]
+    if o.layer == 3
   }
 }
 
@@ -64,4 +70,18 @@ resource "google_bigquery_table" "l2" {
   }
 
   depends_on = [google_bigquery_table.l1]
+}
+
+resource "google_bigquery_table" "l3" {
+  for_each   = local.views_l3
+  project    = data.google_bigquery_dataset.mydataset1.project
+  dataset_id = data.google_bigquery_dataset.mydataset1.dataset_id
+  table_id   = each.value.table_id
+
+  view {
+    query          = each.value.query
+    use_legacy_sql = false
+  }
+
+  depends_on = [google_bigquery_table.l2]
 }

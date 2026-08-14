@@ -26,6 +26,7 @@ type viewParserModel struct {
 	Project                       types.String `tfsdk:"project"`
 	DatasetID                     types.String `tfsdk:"dataset_id"`
 	TableID                       types.String `tfsdk:"table_id"`
+	ReferenceID                   types.String `tfsdk:"reference_id"`
 	Query                         types.String `tfsdk:"query"`
 	DatasetReferences             types.List   `tfsdk:"dataset_references"`
 	References                    types.List   `tfsdk:"references"`
@@ -89,6 +90,7 @@ func (d *ViewParserDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	data.Project = stringOrNull(result.Project)
 	data.DatasetID = stringOrNull(result.DatasetID)
 	data.TableID = types.StringValue(result.ObjectID)
+	data.ReferenceID = referenceID(result.DatasetID, result.ObjectID)
 	data.Query = types.StringValue(result.Query)
 	qualified := sqlparse.QualifyBody(result.Query, sqlparse.QualifyOptions{
 		HomeDataset: result.DatasetID,

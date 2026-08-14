@@ -21,3 +21,19 @@ func TestResourceID(t *testing.T) {
 		}
 	}
 }
+
+func TestReferenceID(t *testing.T) {
+	got := referenceID("mydataset1", "myfunction1")
+	if got.IsNull() || got.ValueString() != "mydataset1.myfunction1" {
+		t.Errorf("referenceID(mydataset1, myfunction1) = %v, want mydataset1.myfunction1", got)
+	}
+	if !referenceID("", "fn").IsNull() {
+		t.Errorf("referenceID empty dataset should be null")
+	}
+	if !referenceID("ds", "").IsNull() {
+		t.Errorf("referenceID empty object should be null")
+	}
+	if !referenceID("", "").IsNull() {
+		t.Errorf("referenceID both empty should be null")
+	}
+}

@@ -27,6 +27,7 @@ type routineParserModel struct {
 	Project                types.String `tfsdk:"project"`
 	DatasetID              types.String `tfsdk:"dataset_id"`
 	RoutineID              types.String `tfsdk:"routine_id"`
+	ReferenceID            types.String `tfsdk:"reference_id"`
 	RoutineType            types.String `tfsdk:"routine_type"`
 	DefinitionBody         types.String `tfsdk:"definition_body"`
 	DatasetReferences      types.List   `tfsdk:"dataset_references"`
@@ -90,6 +91,7 @@ func (d *RoutineParserDataSource) Read(ctx context.Context, req datasource.ReadR
 	data.Project = stringOrNull(result.Project)
 	data.DatasetID = stringOrNull(result.DatasetID)
 	data.RoutineID = types.StringValue(result.ObjectID)
+	data.ReferenceID = referenceID(result.DatasetID, result.ObjectID)
 	data.RoutineType = types.StringValue(string(result.Kind))
 
 	targetProject := ""

@@ -7,10 +7,10 @@ import (
 
 func routineParserSchema() schema.Schema {
 	return schema.Schema{
-		MarkdownDescription: "Parses a BigQuery CREATE SQL statement from a string and supplies its parts as attributes for google_bigquery_routine. Main use case: create and update BigQuery routines from SQL files with Terraform.",
+		MarkdownDescription: "Parses a BigQuery CREATE FUNCTION/PROCEDURE SQL statement from a string and and exposes the required attributes in `google_bigquery_routine` resource in order to create the routine in BigQuery.",
 		Attributes: map[string]schema.Attribute{
 			"sql": schema.StringAttribute{
-				MarkdownDescription: "SQL text containing the CREATE FUNCTION or CREATE PROCEDURE statement to be parsed.",
+				MarkdownDescription: "SQL text containing the CREATE FUNCTION/PROCEDURE statement to be parsed.",
 				Required:            true,
 			},
 			"trim_body": schema.BoolAttribute{
@@ -45,6 +45,10 @@ func routineParserSchema() schema.Schema {
 				MarkdownDescription: "Name of the routine parsed from the SQL statement.",
 				Computed:            true,
 			},
+			"reference_id": schema.StringAttribute{
+				MarkdownDescription: "Join key `<dataset_id>.<routine_id>` for dependency tracking and layering (same as filename / layering convention). Null when dataset_id is absent. Distinct from the GCP-path `id`.",
+				Computed:            true,
+			},
 			"routine_type": schema.StringAttribute{
 				MarkdownDescription: "SCALAR_FUNCTION, TABLE_VALUED_FUNCTION, PROCEDURE, or AGGREGATE_FUNCTION.",
 				Computed:            true,
@@ -58,7 +62,7 @@ func routineParserSchema() schema.Schema {
 				MarkdownDescription: "Distinct dataset IDs referenced in definition_body that differ from the routine's own dataset. Empty when the body only uses the home dataset. Useful with google_bigquery_dataset_access for authorized routines.",
 				Computed:            true,
 			},
-			"references": objectReferencesSchema("Objects referenced in definition_body (routines, views, tables), unique and sorted by dataset_id then object_id. Excludes self-references. Use with bqutils_dependency_layering for creation-order waves."),
+			"references": objectReferencesSchema("Detected references to other objects in the routine's definition_body (routines, views, tables). Thery are unique and sorted by dataset_id then object_id. Excludes self-references. Use with bqutils_dependency_layering for determining the creation-order and applying them in layer/stages."),
 			"language": schema.StringAttribute{
 				MarkdownDescription: "The language of the routine. Possible values: SQL, JAVASCRIPT, PYTHON, JAVA, SCALA.",
 				Computed:            true,

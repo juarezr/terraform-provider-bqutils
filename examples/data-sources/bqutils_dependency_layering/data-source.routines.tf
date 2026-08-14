@@ -2,6 +2,7 @@ locals {
   routine_files = toset([
     "mydataset1.myfunction1.sql",
     "mydataset1.myfunction2.sql",
+    "mydataset1.myfunction3.sql",
   ])
 }
 
@@ -31,13 +32,18 @@ locals {
 
   routines_l1 = {
     for o in local.layered :
-    "${o.dataset_id}.${o.object_id}" => data.bqutils_routine_parser.all["${o.dataset_id}.${o.object_id}"]
+    o.reference_id => data.bqutils_routine_parser.all[o.reference_id]
     if o.layer == 1
   }
   routines_l2 = {
     for o in local.layered :
-    "${o.dataset_id}.${o.object_id}" => data.bqutils_routine_parser.all["${o.dataset_id}.${o.object_id}"]
+    o.reference_id => data.bqutils_routine_parser.all[o.reference_id]
     if o.layer == 2
+  }
+  routines_l3 = {
+    for o in local.layered :
+    o.reference_id => data.bqutils_routine_parser.all[o.reference_id]
+    if o.layer == 3
   }
 }
 
@@ -60,4 +66,15 @@ resource "google_bigquery_routine" "l2" {
   language        = each.value.language
   definition_body = each.value.definition_body
   depends_on      = [google_bigquery_routine.l1]
+}
+
+resource "google_bigquery_routine" "l3" {
+  for_each        = local.routines_l3
+  project         = data.google_bigquery_dataset.mydataset1.project
+  dataset_id      = data.google_bigquery_dataset.mydataset1.dataset_id
+  routine_id      = each.value.routine_id
+  routine_type    = each.value.routine_type
+  language        = each.value.language
+  definition_body = each.value.definition_body
+  depends_on      = [google_bigquery_routine.l2]
 }

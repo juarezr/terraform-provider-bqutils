@@ -7,7 +7,7 @@ import (
 
 func viewParserSchema() schema.Schema {
 	return schema.Schema{
-		MarkdownDescription: "Parses a BigQuery CREATE VIEW or CREATE MATERIALIZED VIEW statement and exposes attributes for google_bigquery_table.",
+		MarkdownDescription: "Parses a BigQuery CREATE VIEW or CREATE MATERIALIZED VIEW statement from a string and exposes the required attributes in `google_bigquery_table` resource in order to create the view in BigQuery.",
 		Attributes: map[string]schema.Attribute{
 			"sql": schema.StringAttribute{
 				MarkdownDescription: "SQL text containing the CREATE VIEW or CREATE MATERIALIZED VIEW statement to be parsed.",
@@ -41,6 +41,10 @@ func viewParserSchema() schema.Schema {
 				MarkdownDescription: "Table/view id parsed from the SQL statement.",
 				Computed:            true,
 			},
+			"reference_id": schema.StringAttribute{
+				MarkdownDescription: "Join key `<dataset_id>.<table_id>` for dependency tracking and layering dependency layering (same as filename / layering convention). Null when dataset_id is absent. Distinct from the GCP-path `id`.",
+				Computed:            true,
+			},
 			"query": schema.StringAttribute{
 				MarkdownDescription: "View query body after the AS element in the SQL statement.",
 				Computed:            true,
@@ -50,7 +54,7 @@ func viewParserSchema() schema.Schema {
 				MarkdownDescription: "Distinct dataset IDs referenced in the view query that differ from the view's own dataset. Empty when the query only uses the home dataset. Useful with google_bigquery_dataset_access for authorized views.",
 				Computed:            true,
 			},
-			"references": objectReferencesSchema("Objects referenced in the view query (routines, views, tables), unique and sorted by dataset_id then object_id. Excludes self-references. Use with bqutils_dependency_layering for creation-order waves."),
+			"references": objectReferencesSchema("Detected references to other objects in the routine's definition_body (routines, views, tables). Thery are unique and sorted by dataset_id then object_id. Excludes self-references. Use with bqutils_dependency_layering for determining the creation-order and applying them in layer/stages."),
 			"description": schema.StringAttribute{
 				MarkdownDescription: "Description from the OPTIONS section of the SQL statement, if present.",
 				Computed:            true,

@@ -1,6 +1,10 @@
 package provider
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/hashicorp/terraform-plugin-framework/types"
+)
 
 const idPlaceholder = "any"
 
@@ -15,4 +19,13 @@ func resourceID(kind, project, dataset, object string) string {
 		dataset = idPlaceholder
 	}
 	return fmt.Sprintf("projects/%s/datasets/%s/%s/%s", project, dataset, kind, object)
+}
+
+// referenceID builds the dependency-join key "<dataset_id>.<object_id>".
+// Returns null when either segment is empty (unqualified CREATE names).
+func referenceID(dataset, object string) types.String {
+	if dataset == "" || object == "" {
+		return types.StringNull()
+	}
+	return types.StringValue(dataset + "." + object)
 }
