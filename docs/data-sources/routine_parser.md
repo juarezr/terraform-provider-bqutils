@@ -2,7 +2,7 @@
 page_title: "bqutils_routine_parser Data Source - bqutils"
 subcategory: ""
 description: |-
-  Parses a BigQuery CREATE SQL statement from a string and supplies its parts as attributes for google_bigquery_routine. Main use case: create and update BigQuery routines from SQL files with Terraform.
+  Parses a BigQuery CREATE FUNCTION/PROCEDURE SQL statement from a string and and exposes the required attributes in `google_bigquery_routine` resource in order to create the routine in BigQuery.
 ---
 
 # bqutils_routine_parser
@@ -358,7 +358,7 @@ resource "google_bigquery_dataset_access" "test_array_distinct" {
 
 ### Required
 
-- `sql` (String) SQL text containing the CREATE FUNCTION or CREATE PROCEDURE statement to be parsed.
+- `sql` (String) SQL text containing the CREATE FUNCTION/PROCEDURE statement to be parsed.
 
 ### Optional
 
@@ -382,7 +382,8 @@ resource "google_bigquery_dataset_access" "test_array_distinct" {
 - `language` (String) The language of the routine. Possible values: SQL, JAVASCRIPT, PYTHON, JAVA, SCALA.
 - `project` (String) Project parsed from a three-part name, if present.
 - `python_options` (Attributes) Python UDF options when present (maps to google_bigquery_routine.python_options). (see [below for nested schema](#nestedatt--python_options))
-- `references` (Attributes List) Objects referenced in definition_body (routines, views, tables), unique and sorted by dataset_id then object_id. Excludes self-references. Use with bqutils_dependency_layering for creation-order waves. (see [below for nested schema](#nestedatt--references))
+- `reference_id` (String) Join key `<dataset_id>.<routine_id>` for dependency tracking and layering (same as filename / layering convention). Null when dataset_id is absent. Distinct from the GCP-path `id`.
+- `references` (Attributes List) Detected references to other objects in the routine's definition_body (routines, views, tables). Thery are unique and sorted by dataset_id then object_id. Excludes self-references. Use with bqutils_dependency_layering for determining the creation-order and applying them in layer/stages. (see [below for nested schema](#nestedatt--references))
 - `remote_function_options` (Attributes) Remote function options when present (maps to google_bigquery_routine.remote_function_options). (see [below for nested schema](#nestedatt--remote_function_options))
 - `return_table_type` (String) JSON for RETURNS TABLE<...> when present (table-valued functions).
 - `return_type` (String) StandardSqlDataType as JSON schema for the function return type when present.

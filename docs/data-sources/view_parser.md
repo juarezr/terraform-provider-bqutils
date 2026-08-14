@@ -2,7 +2,7 @@
 page_title: "bqutils_view_parser Data Source - bqutils"
 subcategory: ""
 description: |-
-  Parses a BigQuery CREATE VIEW or CREATE MATERIALIZED VIEW statement and exposes attributes for google_bigquery_table.
+  Parses a BigQuery CREATE VIEW or CREATE MATERIALIZED VIEW statement from a string and exposes the required attributes in `google_bigquery_table` resource in order to create the view in BigQuery.
 ---
 
 # bqutils_view_parser
@@ -287,7 +287,8 @@ resource "google_bigquery_dataset_access" "view_mytable" {
 - `partitioning_type` (String) Time partitioning type derived from PARTITION BY clause in the SQL statement when present.
 - `project` (String) Project parsed from a three-part view name, if present.
 - `query` (String) View query body after the AS element in the SQL statement.
-- `references` (Attributes List) Objects referenced in the view query (routines, views, tables), unique and sorted by dataset_id then object_id. Excludes self-references. Use with bqutils_dependency_layering for creation-order waves. (see [below for nested schema](#nestedatt--references))
+- `reference_id` (String) Join key `<dataset_id>.<table_id>` for dependency tracking and layering dependency layering (same as filename / layering convention). Null when dataset_id is absent. Distinct from the GCP-path `id`.
+- `references` (Attributes List) Detected references to other objects in the routine's definition_body (routines, views, tables). Thery are unique and sorted by dataset_id then object_id. Excludes self-references. Use with bqutils_dependency_layering for determining the creation-order and applying them in layer/stages. (see [below for nested schema](#nestedatt--references))
 - `refresh_interval_ms` (Number) Converted from refresh_interval_minutes from the OPTIONS section when present.
 - `schema` (String) JSON schema from the view column list when present (types default to STRING when not specified in SQL).
 - `table_id` (String) Table/view id parsed from the SQL statement.
