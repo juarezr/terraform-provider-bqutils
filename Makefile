@@ -136,10 +136,14 @@ clean: clean-build clean-coverage clean-trash ## Clean the project
 .PHONY: fmt
 fmt: ## Format the project source code
 	gofmt -w .
+	goimports -local github.com/juarezr/terraform-provider-bqutils -w .
 
 .PHONY: lint
 lint: ## Lint the project source code ensuring it passes the CI checks
-	gofmt -l .
+# 	golangci-lint run ./...
+	staticcheck ./...
+	go vet ./...
+	deadcode -test .
 
 .PHONY: check
 check: build test testacc lint validate ## Run all the project sanity checks
@@ -183,13 +187,22 @@ uninstall: ## Uninstall the provider from Terraform plugins directory
 .PHONY: tools
 tools: ## Install the Golang tools used by the project
 	go install github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@latest
-	go install golang.org/x/vuln/cmd/govulncheck@latest
 	go install github.com/wadey/gocovmerge@latest
 	go install github.com/boumenot/gocover-cobertura@latest
+	go install golang.org/x/tools/cmd/deadcode@latest
+	go install golang.org/x/tools/cmd/goimports@latest
+	go install honnef.co/go/tools/cmd/staticcheck@latest
+# 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+	go install golang.org/x/vuln/cmd/govulncheck@latest
+	go install github.com/securego/gosec/v2/cmd/gosec@latest
+	go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest
+	go mod tidy
 
 .PHONY: verify
 verify: ## Verify the project dependencies for vulnerabilities
 	govulncheck ./...
+	gosec ./...
+	osv-scanner scan source -r .
 
 .PHONY: outdated
 outdated: ## List the outdated dependencies in the project
