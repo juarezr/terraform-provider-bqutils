@@ -31,7 +31,6 @@ query:
 
 .PHONY: requirements
 requirements: ## Check the required tools are installed
-	@echo "Starting batch processing..."
 	@$(foreach item,$(REQUIRED_TOOLS), echo -n "$(item): "; command -v $(item) || echo "Missing";)
 
 #endregion -----------------------------------------------------------------------------
@@ -79,7 +78,7 @@ $(MARKDOWN_OUTS): $(TEMPLATE_SRCS) $(EXAMPLES_SRCS) $(TFSCHEMA_SRCS) $(PACKAGES_
 generate: $(MARKDOWN_OUTS) ## Build the project documentation
 
 .PHONY: validate
-validate: generate ## Validate the project documentation
+validate: ## Validate the project documentation
 	go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate --provider-name bqutils
 
 #endregion -----------------------------------------------------------------------------
@@ -142,14 +141,15 @@ fmt: ## Format the project source code
 lint: ## Lint the project source code ensuring it passes the CI checks
 # 	golangci-lint run ./...
 	staticcheck ./...
-	go vet ./...
 	deadcode -test .
+	go vet ./...
+	gosec ./...
 
 .PHONY: check
 check: build test testacc lint validate ## Run all the project sanity checks
 
 .PHONY: all
-all: build generate report ## Run all the project build steps
+all: build generate ## Run all the project build steps
 
 #endregion -----------------------------------------------------------------------------
 
@@ -201,7 +201,6 @@ tools: ## Install the Golang tools used by the project
 .PHONY: verify
 verify: ## Verify the project dependencies for vulnerabilities
 	govulncheck ./...
-	gosec ./...
 	osv-scanner scan source -r .
 
 .PHONY: outdated
