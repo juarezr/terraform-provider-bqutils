@@ -279,3 +279,62 @@ WHERE EXTRACT(DAYOFWEEK FROM t1.col1) * 100 + t2.col2 BETWEEN 1 AND 7`
 		t.Fatalf("real FROM table not qualified: %q", got.Body)
 	}
 }
+
+func TestQualifyBody_objectReferences(t *testing.T) {
+	body := `
+BEGIN
+  DECLARE x STRING DEFAULT mydataset5.get_env_name(@@project_id);
+  CALL mydataset2.myprocedure2(arg1);
+  INSERT INTO mydataset2.mytable3 VALUES (1);
+  SELECT * FROM mydataset4.tvf(1) AS t
+  JOIN mydataset7.customer AS c ON true;
+  SELECT name FROM mydataset2.INFORMATION_SCHEMA.TABLES;
+END`
+	got := QualifyBody(body, QualifyOptions{
+		HomeDataset: "mydataset1",
+		HomeObject:  "myproc",
+		Rewrite:     false,
+	})
+	want := []ObjectReference{
+		{DatasetID: "mydataset2", ObjectID: "INFORMATION_SCHEMA.TABLES", ObjectType: "TABLE", ResourceType: "VIEW"},
+		{DatasetID: "mydataset2", ObjectID: "myprocedure2", ObjectType: "PROCEDURE", ResourceType: "ROUTINE"},
+		{DatasetID: "mydataset2", ObjectID: "mytable3", ObjectType: "VIEW", ResourceType: "VIEW"},
+		{DatasetID: "mydataset4", ObjectID: "tvf", ObjectType: "TABLE_VALUED_FUNCTION", ResourceType: "ROUTINE"},
+		{DatasetID: "mydataset5", ObjectID: "get_env_name", ObjectType: "SCALAR_FUNCTION", ResourceType: "ROUTINE"},
+		{DatasetID: "mydataset7", ObjectID: "customer", ObjectType: "VIEW", ResourceType: "VIEW"},
+	}
+	if !reflect.DeepEqual(got.References, want) {
+		t.Fatalf("got=%#v\nwant=%#v", got.References, want)
+	}
+}
+
+func TestQualifyBody_objectReferencesExcludeSelf(t *testing.T) {
+	body := `SELECT mydataset1.helper(1), mydataset1.self_fn(2)`
+	got := QualifyBody(body, QualifyOptions{
+		HomeDataset: "mydataset1",
+		HomeObject:  "self_fn",
+		Rewrite:     false,
+	})
+	want := []ObjectReference{
+		{DatasetID: "mydataset1", ObjectID: "helper", ObjectType: "SCALAR_FUNCTION", ResourceType: "ROUTINE"},
+	}
+	if !reflect.DeepEqual(got.References, want) {
+		t.Fatalf("got=%#v want=%#v", got.References, want)
+	}
+}
+
+func TestQualifyBody_objectReferencesUniqueSorted(t *testing.T) {
+	body := `SELECT mydataset2.fn(1), mydataset2.fn(2) FROM mydataset1.t`
+	got := QualifyBody(body, QualifyOptions{
+		HomeDataset: "other",
+		HomeObject:  "x",
+		Rewrite:     false,
+	})
+	want := []ObjectReference{
+		{DatasetID: "mydataset1", ObjectID: "t", ObjectType: "VIEW", ResourceType: "VIEW"},
+		{DatasetID: "mydataset2", ObjectID: "fn", ObjectType: "SCALAR_FUNCTION", ResourceType: "ROUTINE"},
+	}
+	if !reflect.DeepEqual(got.References, want) {
+		t.Fatalf("got=%#v want=%#v", got.References, want)
+	}
+}

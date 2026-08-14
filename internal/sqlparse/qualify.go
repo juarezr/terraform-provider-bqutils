@@ -14,14 +14,26 @@ type QualifyOptions struct {
 	// HomeDataset is the CREATE object's dataset; only foreign datasets are listed
 	// and rewritten. Empty HomeDataset treats every body dataset as foreign.
 	HomeDataset string
+	// HomeObject is the CREATE object's id (routine_id / table_id). Used to exclude
+	// self-references from References. Empty skips self filtering.
+	HomeObject string
 	// Rewrite enables project qualification and ${project} placeholder replacement.
 	Rewrite bool
+}
+
+// ObjectReference is a classified dataset.object dependency found in a SQL body.
+type ObjectReference struct {
+	DatasetID    string
+	ObjectID     string
+	ObjectType   string // SCALAR_FUNCTION | TABLE_VALUED_FUNCTION | PROCEDURE | VIEW | TABLE
+	ResourceType string // ROUTINE | VIEW
 }
 
 // QualifyResult is the outcome of QualifyBody.
 type QualifyResult struct {
 	Body              string
-	DatasetReferences []string // sorted, unique, excluding HomeDataset; empty if none foreign
+	DatasetReferences []string          // sorted, unique, excluding HomeDataset; empty if none foreign
+	References        []ObjectReference // sorted unique by (dataset_id, object_id); excludes self
 }
 
 // bodyRef is one detected project.dataset.object or dataset.object span.
@@ -36,6 +48,16 @@ type bodyRef struct {
 	infoSchema bool // dataset.INFORMATION_SCHEMA.object (rewrite still two-part)
 }
 
+// expectKind tracks why the scanner expects a relation/name next.
+type expectKind int
+
+const (
+	expectNone        expectKind = iota
+	expectFromJoin               // FROM / JOIN — table or TVF
+	expectTableClause            // INTO / UPDATE / MERGE / DELETE / TRUNCATE / USING
+	expectCall                   // CALL — procedure
+)
+
 const projectPlaceholder = "${project}"
 
 // QualifyBody scans a routine/view body for dataset-qualified entity references,
@@ -46,9 +68,9 @@ func QualifyBody(body string, opts QualifyOptions) QualifyResult {
 		out = strings.ReplaceAll(out, projectPlaceholder, opts.TargetProject)
 	}
 
-	refs := findBodyRefs(out)
+	scan := findBodyRefs(out)
 	foreignSet := map[string]struct{}{}
-	for _, r := range refs {
+	for _, r := range scan.refs {
 		if r.dataset == "" {
 			continue
 		}
@@ -65,13 +87,77 @@ func QualifyBody(body string, opts QualifyOptions) QualifyResult {
 	sort.Strings(foreign)
 
 	if opts.Rewrite && opts.TargetProject != "" && len(foreign) > 0 {
-		out = rewriteTwoPartRefs(out, refs, opts)
+		out = rewriteTwoPartRefs(out, scan.refs, opts)
 	}
 
 	if foreign == nil {
 		foreign = []string{}
 	}
-	return QualifyResult{Body: out, DatasetReferences: foreign}
+	return QualifyResult{
+		Body:              out,
+		DatasetReferences: foreign,
+		References:        filterObjectReferences(scan.objectRefs, opts),
+	}
+}
+
+func filterObjectReferences(in []ObjectReference, opts QualifyOptions) []ObjectReference {
+	seen := map[string]struct{}{}
+	out := make([]ObjectReference, 0, len(in))
+	for _, r := range in {
+		if r.DatasetID == "" || r.ObjectID == "" {
+			continue
+		}
+		if opts.HomeDataset != "" && opts.HomeObject != "" &&
+			r.DatasetID == opts.HomeDataset && r.ObjectID == opts.HomeObject {
+			continue
+		}
+		key := r.DatasetID + "\x00" + r.ObjectID
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].DatasetID != out[j].DatasetID {
+			return out[i].DatasetID < out[j].DatasetID
+		}
+		return out[i].ObjectID < out[j].ObjectID
+	})
+	if out == nil {
+		out = []ObjectReference{}
+	}
+	return out
+}
+
+func classifyObjectRef(r bodyRef, kind expectKind, isParen bool) ObjectReference {
+	ref := ObjectReference{
+		DatasetID: r.dataset,
+		ObjectID:  r.object,
+	}
+	switch {
+	case kind == expectCall:
+		ref.ObjectType = "PROCEDURE"
+		ref.ResourceType = "ROUTINE"
+	case kind == expectFromJoin && isParen:
+		ref.ObjectType = "TABLE_VALUED_FUNCTION"
+		ref.ResourceType = "ROUTINE"
+	case (kind == expectFromJoin || kind == expectTableClause) && !isParen:
+		if r.infoSchema || strings.Contains(strings.ToUpper(r.object), "INFORMATION_SCHEMA") {
+			ref.ObjectType = "TABLE"
+		} else {
+			ref.ObjectType = "VIEW"
+		}
+		ref.ResourceType = "VIEW"
+	case isParen:
+		ref.ObjectType = "SCALAR_FUNCTION"
+		ref.ResourceType = "ROUTINE"
+	default:
+		// Should not happen for recorded refs; treat as VIEW relation.
+		ref.ObjectType = "VIEW"
+		ref.ResourceType = "VIEW"
+	}
+	return ref
 }
 
 func rewriteTwoPartRefs(body string, refs []bodyRef, opts QualifyOptions) string {
@@ -108,9 +194,15 @@ func formatQualifiedRef(project string, r bodyRef) string {
 	return "`" + project + "`." + "`" + r.dataset + "`." + "`" + r.object + "`"
 }
 
-func findBodyRefs(s string) []bodyRef {
+type bodyScanResult struct {
+	refs       []bodyRef
+	objectRefs []ObjectReference
+}
+
+func findBodyRefs(s string) bodyScanResult {
 	var refs []bodyRef
-	expectRef := false
+	var objectRefs []ObjectReference
+	expect := expectNone
 	pendingExtract := false
 	parenDepth := 0
 	var extractDepths []int // paren depths of open EXTRACT( ... ) args
@@ -142,7 +234,7 @@ func findBodyRefs(s string) []bodyRef {
 			pendingExtract = false
 			ref, next, ok := tryParseDottedRef(s, i)
 			if ok {
-				i = consumeRefOrSkip(s, ref, next, &expectRef, &refs)
+				i = consumeRefOrSkip(s, ref, next, &expect, &refs, &objectRefs)
 				continue
 			}
 			i++
@@ -160,7 +252,7 @@ func findBodyRefs(s string) []bodyRef {
 				pendingExtract = false
 				ref, end, ok := tryParseDottedRef(s, i)
 				if ok {
-					i = consumeRefOrSkip(s, ref, end, &expectRef, &refs)
+					i = consumeRefOrSkip(s, ref, end, &expect, &refs, &objectRefs)
 					continue
 				}
 			}
@@ -177,32 +269,42 @@ func findBodyRefs(s string) []bodyRef {
 					continue
 				}
 				pendingExtract = false
-				expectRef = true
+				expect = expectFromJoin
 				i = next
 				continue
-			case "JOIN", "INTO", "UPDATE", "USING", "CALL", "MERGE", "DELETE", "TRUNCATE":
+			case "JOIN":
 				pendingExtract = false
-				expectRef = true
+				expect = expectFromJoin
+				i = next
+				continue
+			case "INTO", "UPDATE", "USING", "MERGE", "DELETE", "TRUNCATE":
+				pendingExtract = false
+				expect = expectTableClause
+				i = next
+				continue
+			case "CALL":
+				pendingExtract = false
+				expect = expectCall
 				i = next
 				continue
 			case "TABLE":
-				// Keep expectRef from TRUNCATE TABLE ...
+				// Keep expect from TRUNCATE TABLE ...
 				pendingExtract = false
 				i = next
 				continue
 			case "UNNEST":
 				pendingExtract = false
-				expectRef = false
+				expect = expectNone
 				i = next
 				continue
 			case "WITH":
 				pendingExtract = false
-				expectRef = false
+				expect = expectNone
 				i = next
 				continue
 			case "ON", "WHERE", "GROUP", "ORDER", "LIMIT", "HAVING", "SET", "VALUES":
 				pendingExtract = false
-				expectRef = false
+				expect = expectNone
 				i = next
 				continue
 			case "LEFT", "RIGHT", "FULL", "INNER", "CROSS", "OUTER", "AS", "BY",
@@ -217,14 +319,14 @@ func findBodyRefs(s string) []bodyRef {
 
 			pendingExtract = false
 			// Single-ident relation (CTE / unqualified table) in table-ref context
-			if expectRef {
+			if expect != expectNone {
 				i = next
 				i = skipOptionalAlias(s, i)
 				if i < len(s) && s[i] == ',' {
 					i++
-					expectRef = true
+					// keep expect
 				} else {
-					expectRef = false
+					expect = expectNone
 				}
 				continue
 			}
@@ -233,7 +335,7 @@ func findBodyRefs(s string) []bodyRef {
 		}
 
 		// Punctuation
-		if s[i] == ',' && expectRef {
+		if s[i] == ',' && expect != expectNone {
 			i++
 			continue
 		}
@@ -243,7 +345,7 @@ func findBodyRefs(s string) []bodyRef {
 				extractDepths = append(extractDepths, parenDepth)
 				pendingExtract = false
 			}
-			expectRef = false
+			expect = expectNone
 			i++
 			continue
 		}
@@ -254,18 +356,18 @@ func findBodyRefs(s string) []bodyRef {
 			if parenDepth > 0 {
 				parenDepth--
 			}
-			expectRef = false
+			expect = expectNone
 			pendingExtract = false
 			i++
 			continue
 		}
 		if s[i] == ';' {
-			expectRef = false
+			expect = expectNone
 			pendingExtract = false
 		}
 		i++
 	}
-	return refs
+	return bodyScanResult{refs: refs, objectRefs: objectRefs}
 }
 
 func inExtractArgs(extractDepths []int, parenDepth int) bool {
@@ -278,30 +380,30 @@ func inExtractArgs(extractDepths []int, parenDepth int) bool {
 }
 
 // consumeRefOrSkip records a multi-part ref when in table context or a call, then advances.
-func consumeRefOrSkip(s string, ref bodyRef, next int, expectRef *bool, refs *[]bodyRef) int {
-	isCall := next < len(s) && s[next] == '('
-	if (*expectRef || isCall) && ref.parts >= 2 {
+func consumeRefOrSkip(s string, ref bodyRef, next int, expect *expectKind, refs *[]bodyRef, objectRefs *[]ObjectReference) int {
+	isParen := next < len(s) && s[next] == '('
+	if (*expect != expectNone || isParen) && ref.parts >= 2 {
 		*refs = append(*refs, ref)
+		*objectRefs = append(*objectRefs, classifyObjectRef(ref, *expect, isParen))
 		i := next
-		if *expectRef {
+		if *expect != expectNone {
 			i = skipOptionalAlias(s, i)
 			if i < len(s) && s[i] == ',' {
 				i++
-				*expectRef = true
+				// keep expect
 			} else {
-				*expectRef = false
+				*expect = expectNone
 			}
 		}
 		return i
 	}
-	if *expectRef && ref.parts == 1 {
+	if *expect != expectNone && ref.parts == 1 {
 		i := next
 		i = skipOptionalAlias(s, i)
 		if i < len(s) && s[i] == ',' {
 			i++
-			*expectRef = true
 		} else {
-			*expectRef = false
+			*expect = expectNone
 		}
 		return i
 	}
