@@ -197,7 +197,7 @@ func splitTopLevel(s string, sep rune) []string {
 				depth--
 			}
 		default:
-			if c == byte(sep) && depth == 0 {
+			if sep >= 0 && sep <= 0xFF && c == byte(sep) && depth == 0 {
 				parts = append(parts, s[start:i])
 				start = i + 1
 			}
