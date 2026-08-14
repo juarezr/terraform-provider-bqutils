@@ -5,6 +5,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+
 	"github.com/juarezr/terraform-provider-bqutils/internal/sqlparse"
 )
 
@@ -29,6 +30,7 @@ type routineParserModel struct {
 	RoutineType            types.String `tfsdk:"routine_type"`
 	DefinitionBody         types.String `tfsdk:"definition_body"`
 	DatasetReferences      types.List   `tfsdk:"dataset_references"`
+	References             types.List   `tfsdk:"references"`
 	Language               types.String `tfsdk:"language"`
 	ReturnType             types.String `tfsdk:"return_type"`
 	ReturnTableType        types.String `tfsdk:"return_table_type"`
@@ -99,12 +101,16 @@ func (d *RoutineParserDataSource) Read(ctx context.Context, req datasource.ReadR
 	qualified := sqlparse.QualifyBody(result.DefinitionBody, sqlparse.QualifyOptions{
 		TargetProject: targetProject,
 		HomeDataset:   result.DatasetID,
+		HomeObject:    result.ObjectID,
 		Rewrite:       true,
 	})
 	data.DefinitionBody = types.StringValue(qualified.Body)
 	refs, diags := types.ListValueFrom(ctx, types.StringType, qualified.DatasetReferences)
 	resp.Diagnostics.Append(diags...)
 	data.DatasetReferences = refs
+	objRefs, diags := mapObjectReferences(ctx, qualified.References)
+	resp.Diagnostics.Append(diags...)
+	data.References = objRefs
 
 	data.Language = stringOrNull(result.Language)
 	data.ReturnType = stringOrNull(result.ReturnTypeJSON)

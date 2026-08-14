@@ -13,6 +13,7 @@ Parses a BigQuery `CREATE VIEW` or `CREATE MATERIALIZED VIEW` SQL statement and 
 
 - The datasource can handle the `CREATE VIEW` and the `CREATE MATERIALIZED VIEW` SQL statements.
 - Unmappable `OPTIONS` (for example `retain_partitions`) from the SQL statement are ignored.
+- The computed `references` attribute lists dataset-qualified objects used in the query (for creation-order layering with [bqutils_dependency_layering](dependency_layering)). Call-site parsing cannot tell tables from views or scalar from aggregate functions.
 
 ## Example Usage
 
@@ -286,6 +287,17 @@ resource "google_bigquery_dataset_access" "view_mytable" {
 - `partitioning_type` (String) Time partitioning type derived from PARTITION BY clause in the SQL statement when present.
 - `project` (String) Project parsed from a three-part view name, if present.
 - `query` (String) View query body after the AS element in the SQL statement.
+- `references` (Attributes List) Objects referenced in the view query (routines, views, tables), unique and sorted by dataset_id then object_id. Excludes self-references. Use with bqutils_dependency_layering for creation-order waves. (see [below for nested schema](#nestedatt--references))
 - `refresh_interval_ms` (Number) Converted from refresh_interval_minutes from the OPTIONS section when present.
 - `schema` (String) JSON schema from the view column list when present (types default to STRING when not specified in SQL).
 - `table_id` (String) Table/view id parsed from the SQL statement.
+
+<a id="nestedatt--references"></a>
+### Nested Schema for `references`
+
+Read-Only:
+
+- `dataset_id` (String) Dataset ID of the referenced object (no backticks).
+- `object_id` (String) Object ID (routine, view, or table name; no backticks).
+- `object_type` (String) SCALAR_FUNCTION, TABLE_VALUED_FUNCTION, PROCEDURE, VIEW, or TABLE (INFORMATION_SCHEMA only). Call-site limits apply: VIEW may include tables/materialized views; SCALAR_FUNCTION may include aggregates.
+- `resource_type` (String) ROUTINE or VIEW, derived from object_type for Terraform resource selection.

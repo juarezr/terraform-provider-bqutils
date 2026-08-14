@@ -1061,7 +1061,7 @@ func (p *parser) parseOptionsMap() (map[string]string, error) {
 func (p *parser) parseOptionValue() (string, error) {
 	t := p.peek()
 	switch t.kind {
-	case tokString, tokRawString, tokNumber, tokTrue, tokFalse:
+	case tokString, tokNumber, tokTrue, tokFalse:
 		p.next()
 		return t.lit, nil
 	case tokLBracket:

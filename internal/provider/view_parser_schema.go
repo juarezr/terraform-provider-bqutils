@@ -50,6 +50,7 @@ func viewParserSchema() schema.Schema {
 				MarkdownDescription: "Distinct dataset IDs referenced in the view query that differ from the view's own dataset. Empty when the query only uses the home dataset. Useful with google_bigquery_dataset_access for authorized views.",
 				Computed:            true,
 			},
+			"references": objectReferencesSchema("Objects referenced in the view query (routines, views, tables), unique and sorted by dataset_id then object_id. Excludes self-references. Use with bqutils_dependency_layering for creation-order waves."),
 			"description": schema.StringAttribute{
 				MarkdownDescription: "Description from the OPTIONS section of the SQL statement, if present.",
 				Computed:            true,

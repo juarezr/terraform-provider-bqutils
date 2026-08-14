@@ -39,9 +39,10 @@ requirements: ## Check the required tools are installed
 #region Build and Test -----------------------------------------------------------------
 
 SQLPARSE_SRCS := $(wildcard internal/sqlparse/*.go)
+DEPTRACK_SRCS := $(wildcard internal/deptrack/*.go)
 PROVIDER_SRCS := $(wildcard internal/provider/*.go) main.go
 PACKAGES_SRCS := go.mod go.sum
-BUILDING_SRCS := $(SQLPARSE_SRCS) $(PROVIDER_SRCS) $(PACKAGES_SRCS)
+BUILDING_SRCS := $(SQLPARSE_SRCS) $(DEPTRACK_SRCS) $(PROVIDER_SRCS) $(PACKAGES_SRCS)
 
 ${BINARY}: $(BUILDING_SRCS)
 	go build -o ${BINARY}
@@ -51,11 +52,11 @@ build: ${BINARY} ## Compile the project source code
 
 .PHONY: test
 test: ## Run the unit tests
-	go test ./... -v -count=1
+	go test ./... -v -count=1 -timeout 10m
 
 .PHONY: testacc
 testacc: ## Run the acceptance tests
-	TF_ACC=1 go test ./... -v -count=1 -timeout 120m
+	TF_ACC=1 go test ./... -v -count=1 -timeout 11m
 
 .PHONY: clean-build
 clean-build: ## Clean the build artifacts
@@ -85,14 +86,13 @@ validate: generate ## Validate the project documentation
 
 #region Coverage -----------------------------------------------------------------------
 
-coverage-sqlparse.cover: $(SQLPARSE_SRCS)
-	go test ./internal/sqlparse/ -count=1 -coverprofile=coverage-sqlparse.cover -covermode=atomic
+COVERAGE_SRCS := $(filter-out %_test.go,${BUILDING_SRCS})
 
-coverage-provider.cover: $(PROVIDER_SRCS) $(PACKAGES_SRCS)
-	TF_ACC=1 go test ./internal/provider/ -count=1 -timeout 20m -coverprofile=coverage-provider.cover -covermode=atomic
+coverage.cover: $(COVERAGE_SRCS)
+	TF_ACC=1 go test ./... -count=1 -timeout 12m -coverprofile=coverage.cover -covermode=atomic
 
-coverage.out: coverage-sqlparse.cover coverage-provider.cover
-	gocovmerge coverage-sqlparse.cover coverage-provider.cover > coverage.out
+coverage.out: coverage.cover
+	gocovmerge coverage.cover > coverage.out
 
 coverage.xml: coverage.out
 	gocover-cobertura < coverage.out > coverage.xml
@@ -136,10 +136,14 @@ clean: clean-build clean-coverage clean-trash ## Clean the project
 .PHONY: fmt
 fmt: ## Format the project source code
 	gofmt -w .
+	goimports -local github.com/juarezr/terraform-provider-bqutils -w .
 
 .PHONY: lint
 lint: ## Lint the project source code ensuring it passes the CI checks
-	gofmt -l .
+# 	golangci-lint run ./...
+	staticcheck ./...
+	go vet ./...
+	deadcode -test .
 
 .PHONY: check
 check: build test testacc lint validate ## Run all the project sanity checks
@@ -183,13 +187,22 @@ uninstall: ## Uninstall the provider from Terraform plugins directory
 .PHONY: tools
 tools: ## Install the Golang tools used by the project
 	go install github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@latest
-	go install golang.org/x/vuln/cmd/govulncheck@latest
 	go install github.com/wadey/gocovmerge@latest
 	go install github.com/boumenot/gocover-cobertura@latest
+	go install golang.org/x/tools/cmd/deadcode@latest
+	go install golang.org/x/tools/cmd/goimports@latest
+	go install honnef.co/go/tools/cmd/staticcheck@latest
+# 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+	go install golang.org/x/vuln/cmd/govulncheck@latest
+	go install github.com/securego/gosec/v2/cmd/gosec@latest
+	go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest
+	go mod tidy
 
 .PHONY: verify
 verify: ## Verify the project dependencies for vulnerabilities
 	govulncheck ./...
+	gosec ./...
+	osv-scanner scan source -r .
 
 .PHONY: outdated
 outdated: ## List the outdated dependencies in the project

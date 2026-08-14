@@ -12,7 +12,6 @@ const (
 	tokIdent
 	tokString
 	tokNumber
-	tokRawString // r"""...""" body-like
 	tokCreate
 	tokOr
 	tokReplace
@@ -164,14 +163,6 @@ func (l *lexer) scanAll() {
 				continue
 			}
 			if isIdentStart(r) {
-				if (r == 'r' || r == 'R') && l.lookingAtRawString(size) {
-					lit, ok := l.scanRawTripleString()
-					if !ok {
-						return
-					}
-					l.tokens = append(l.tokens, token{kind: tokRawString, lit: lit, line: line, col: col, offset: off})
-					continue
-				}
 				lit := l.scanIdent()
 				kind := keywordKind(lit)
 				l.tokens = append(l.tokens, token{kind: kind, lit: lit, line: line, col: col, offset: off})
@@ -287,25 +278,8 @@ func (l *lexer) scanBacktickIdent() string {
 }
 
 func (l *lexer) scanQuotedString(quote rune) (string, bool) {
-	// Support ''' and """ triple quotes as well as single-char quotes
-	if l.pos+2 < len(l.input) {
-		s := l.input[l.pos : l.pos+3]
-		if (quote == '\'' && s == "'''") || (quote == '"' && s == "\"\"\"") {
-			l.advance(3)
-			start := l.pos
-			end := s
-			for l.pos+2 < len(l.input) {
-				if l.input[l.pos:l.pos+3] == end {
-					lit := l.input[start:l.pos]
-					l.advance(3)
-					return lit, true
-				}
-				l.advance(1)
-			}
-			l.err = &ParseError{Message: "unterminated string", Line: l.line, Column: l.col, Offset: l.pos}
-			return "", false
-		}
-	}
+	// Header OPTIONS/literals use '...'' / "..." only. Triple-quoted AS bodies are
+	// captured from raw input after the lexer stops at AS (see captureQuotedBody).
 	l.advance(1)
 	var b strings.Builder
 	for l.pos < len(l.input) {
@@ -325,29 +299,6 @@ func (l *lexer) scanQuotedString(quote rune) (string, bool) {
 		l.advance(size)
 	}
 	l.err = &ParseError{Message: "unterminated string", Line: l.line, Column: l.col, Offset: l.pos}
-	return "", false
-}
-
-func (l *lexer) lookingAtRawString(rSize int) bool {
-	rest := l.input[l.pos+rSize:]
-	return strings.HasPrefix(rest, "\"\"\"") || strings.HasPrefix(rest, "'''")
-}
-
-func (l *lexer) scanRawTripleString() (string, bool) {
-	// r""" or r'''
-	l.advance(1) // r
-	end := l.input[l.pos : l.pos+3]
-	l.advance(3)
-	start := l.pos
-	for l.pos+2 < len(l.input) {
-		if l.input[l.pos:l.pos+3] == end {
-			lit := l.input[start:l.pos]
-			l.advance(3)
-			return lit, true
-		}
-		l.advance(1)
-	}
-	l.err = &ParseError{Message: "unterminated raw string", Line: l.line, Column: l.col, Offset: l.pos}
 	return "", false
 }
 
@@ -446,10 +397,10 @@ func peekSQLKeyword(input string, i int) (next string, end int) {
 		return "", i
 	}
 	start := i
-	r, size := utf8.DecodeRuneInString(input[i:])
+	_, size := utf8.DecodeRuneInString(input[i:])
 	i += size
 	for i < len(input) {
-		r, size = utf8.DecodeRuneInString(input[i:])
+		r, size := utf8.DecodeRuneInString(input[i:])
 		if !isIdentPart(r) {
 			break
 		}
