@@ -47,14 +47,14 @@ func (d *DependencyLayeringDataSource) Metadata(_ context.Context, req datasourc
 
 func (d *DependencyLayeringDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Computes creation-order layers (waves) for BigQuery routines and views from parser `references`, for Pattern B layered `for_each` with static inter-layer `depends_on`.",
+		MarkdownDescription: "Computes creation-order layers (stages) used to track the dependencies between BigQuery routines and views. It allows the resource to be created in the correct order and avoid errors when executing the terraform apply command. Designed to be used coupled with the `for_each` and `depends_on` attributes in dynamic resource blocks of type `google_bigquery_routine` or `google_bigquery_table` from the Google Provider separated by layers.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Synthetic id for this data source instance.",
 				Computed:            true,
 			},
 			"source_references": schema.ListNestedAttribute{
-				MarkdownDescription: "Managed objects to layer, typically built from bqutils_routine_parser / bqutils_view_parser instances. Nested `references` may be assigned directly from parser `references` (extra fields like resource_type are accepted).",
+				MarkdownDescription: "Receives the list of objects and dependencies to compute the creation order and layering. Typically this list is built from bqutils_routine_parser / bqutils_view_parser instances. Its values may be assigned directly from the `references` attributes from a computed list of parsers.",
 				Required:            true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -67,28 +67,28 @@ func (d *DependencyLayeringDataSource) Schema(_ context.Context, _ datasource.Sc
 							Required:            true,
 						},
 						"object_type": schema.StringAttribute{
-							MarkdownDescription: "From routine_type for routines, or VIEW for views (MATERIALIZED_VIEW allowed).",
+							MarkdownDescription: "Assigned typically from the `routine_type` attribute for `bqutils_routine_parser` instances, or `VIEW` for `bqutils_view_parser` instances (`MATERIALIZED_VIEW` also allowed).",
 							Required:            true,
 						},
 						"references": schema.ListNestedAttribute{
-							MarkdownDescription: "Dependencies from the object's SQL body (parser references).",
+							MarkdownDescription: "Dependencies from the parsed SQL body (usually obtained from the parser `references` attribute).",
 							Required:            true,
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
 									"dataset_id": schema.StringAttribute{
-										MarkdownDescription: "Dataset of the referenced object.",
+										MarkdownDescription: "Dataset of the referenced object extracted from the parsed SQL body.",
 										Required:            true,
 									},
 									"object_id": schema.StringAttribute{
-										MarkdownDescription: "Id of the referenced object.",
+										MarkdownDescription: "Id of the referenced object extracted from the parsed SQL body.",
 										Required:            true,
 									},
 									"object_type": schema.StringAttribute{
-										MarkdownDescription: "Call-site object type from the parser.",
+										MarkdownDescription: "Call-site object type detected in the parsed SQL body.",
 										Required:            true,
 									},
 									"resource_type": schema.StringAttribute{
-										MarkdownDescription: "ROUTINE or VIEW from the parser (accepted for type compatibility; unused by the layering algorithm).",
+										MarkdownDescription: "Values are `ROUTINE` or `VIEW`. It is computed from the `object_type` attribute (can be used by the layering terraform code to filter the objects by resource type and assign them to the correct resource block).",
 										Optional:            true,
 									},
 								},
@@ -98,20 +98,20 @@ func (d *DependencyLayeringDataSource) Schema(_ context.Context, _ datasource.Sc
 				},
 			},
 			"layered_references": schema.ListNestedAttribute{
-				MarkdownDescription: "Managed objects sorted by layer then dataset_id then object_id. Filter by layer for wave resources; use resource_type / object_type for alternate-2 / alternate-3 splits.",
+				MarkdownDescription: "Return the objects received in the `source_references` attribute ordered by the order that they should be created. These objects are sorted by layer then dataset_id then object_id. To create the resources in the correct order, you have to supply these objects to be created in dynamic resource blocks of type `google_bigquery_routine` or `google_bigquery_table` separated by layer. Each layer will be dependent on the previous layer, so you have to set the `depends_on` attributes between the layers/blocks.",
 				Computed:            true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"layer": schema.Int64Attribute{
-							MarkdownDescription: "Creation wave starting at 1. Objects in the same layer have no managed dependency on each other.",
+							MarkdownDescription: "Indicates in which layer the object should be created. Is 0 if empty, otherwise starts at 1. Objects in the same layer does not require dependency enforcement on each other. Different layers require the `depends_on` attribute to be set between them.",
 							Computed:            true,
 						},
 						"dataset_id": schema.StringAttribute{
-							MarkdownDescription: "Dataset of the object to create.",
+							MarkdownDescription: "Dataset where the object is being created.",
 							Computed:            true,
 						},
 						"object_id": schema.StringAttribute{
-							MarkdownDescription: "Object id to create.",
+							MarkdownDescription: "Id of the object being created (usually is the routine_id or table_id).",
 							Computed:            true,
 						},
 						"object_type": schema.StringAttribute{
@@ -119,14 +119,15 @@ func (d *DependencyLayeringDataSource) Schema(_ context.Context, _ datasource.Sc
 							Computed:            true,
 						},
 						"resource_type": schema.StringAttribute{
-							MarkdownDescription: "Derived: VIEW (or MATERIALIZED_VIEW) → VIEW; routine kinds → ROUTINE.",
+							MarkdownDescription: "Values are `ROUTINE` or `VIEW`. It is computed from the `object_type` attribute (can be used by the layering terraform code to filter the objects by resource type and assign them to the correct resource block).",
+							Computed:            true,
 							Computed:            true,
 						},
 					},
 				},
 			},
 			"max_layers": schema.Int64Attribute{
-				MarkdownDescription: "Maximum layer number in layered_references, or 0 when empty. Pre-declare wave resources l1..lN for at least this depth.",
+				MarkdownDescription: "Maximum layer number detected in the `layered_references` attribute. 0 when empty. Use it to know the maximum number of layers that should be created in the terraform code.",
 				Computed:            true,
 			},
 		},

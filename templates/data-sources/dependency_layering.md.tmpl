@@ -7,42 +7,60 @@ description: |-
 
 # {{.Name}}
 
-Computes creation-order **layers** (waves) for BigQuery routines and views from parser `references`, so Terraform can create dependents after their dependencies using this pattern: one Google resource block per wave, `for_each` filtered by `layer`, and static inter-layer `depends_on`.
+Computes creation-order **layers** (stages) used to track the dependencies between BigQuery routines and views. It allows the resource to be created in the correct order and avoid errors when executing the terraform apply command. Designed to be used coupled with the `for_each` and `depends_on` attributes in dynamic resource blocks of type `google_bigquery_routine` or `google_bigquery_table` from the Google Provider separated by layers.
 
-BigQuery requires callees (routines) and referenced views to exist before callers. Terraform will not infer that order from SQL alone: wave resources are configured from parsers, not from the previous wave's attributes. Use this data source to assign layers, then wire waves with `depends_on` (or an equivalent whole-resource reference).
+BigQuery requires callees (routines) and referenced views to exist before callers. Terraform will not infer that order from SQL alone: stage resources are configured from parsers, not from the previous stage's attributes. Use this data source to assign layers, then wire stages with `depends_on` (or an equivalent whole-resource reference).
 
 ## Caveats
 
-- Pre-declare one Google resource block per wave (`l1`, `l2`, …). Filter with `if o.layer == N`. Use `max_layers` to know the required depth. Terraform cannot create a dynamic number of resource blocks from `max_layers`.
-- Objects in the same layer have no managed dependency on each other; only inter-layer `depends_on` is required.
-- Edges to objects not listed in `source_references` (external tables, unmanaged routines) and `INFORMATION_SCHEMA` references are dropped (not errors).
-- Detectable problems (cycles, duplicate `(dataset_id, object_id)`, empty `dataset_id` / `object_id`) produce plan/apply errors.
-- Call-site parsing cannot distinguish tables vs views or scalar vs aggregate functions.
+- Terraform cannot create a dynamic number of resource blocks that match the number of layers computed by the datasource.
+  - The `depends_on` attribute of the resource blocks must be static.
+  - So you must create resource blocks for the different layers manually.
+- Call-site parsing of SQL `CREATE` statements cannot distinguish between tables vs views or scalar vs aggregate functions.
+- Objects in the same layer have no managed dependency on each other; but inter-layer dependencies require a `depends_on` attribute to be set between the resource blocks of the different layers, particularly the next-to-last layer.
+- Some detectable conditions are not allowed to occur in the terraform code.
+  - Examples: cycles, duplicate `(dataset_id, object_id)`, empty `dataset_id` / `object_id`
+  - For these conditions, the datasource will produce plan/apply errors.
+- Some references listed in `source_references` (external tables, unmanaged routines, `INFORMATION_SCHEMA` references) are dropped from the computation  of `layered_references` attributes (not errors).
 
 ## Example Usage
 
 ### Problem: routines that call other routines
 
-`myfunction2` calls `myfunction1`. Creating them in the wrong order fails in BigQuery. SQL files:
+In this example, `myfunction2` calls `myfunction1`, and `myfunction3` calls `myfunction2`. Creating them in the wrong order fails in BigQuery.
+
+Suppose the following SQL files:
 
 {{ codefile "sql" "examples/data-sources/bqutils_dependency_layering/mydataset1.myfunction1.sql" }}
 
 {{ codefile "sql" "examples/data-sources/bqutils_dependency_layering/mydataset1.myfunction2.sql" }}
 
-Parse with `for_each`, layer, then create wave resources. Key parsers by `trimsuffix(file, ".sql")` so the map key is `dataset.object`:
+To let terraform create the resources in the correct order, we can use the `bqutils_dependency_layering` datasource to keep track of which routines call other routines and compute the layers and then create the resources in the correct order.
+
+To do this, one can follow these steps:
+
+1. Parse the SQL files with the `bqutils_routine_parser` datasource to get the `references` for each routine.
+2. Use the `bqutils_dependency_layering` datasource to keep track of which routines call other routines and compute the layers.
+3. Create the resources in the correct order using the `for_each` and `depends_on` attributes.
+
+Tips and conventions:
+
+- Name your routines and views following the filename convention: `dataset.object.sql`.
+- Load the SQL files into the parsers by using the `for_each` attribute and the `trimsuffix(file, ".sql")` function so the map key matches the parsers `reference_id` attribute value.
+- Filter the objects from the parsers by `resource_type` and layer, and then link each one to 1 resource block per layer of the `google_bigquery_routine` and `google_bigquery_table` resources.
 
 {{ tffile "examples/data-sources/bqutils_dependency_layering/data-source.routines.tf" }}
 
 ### Problem: views that reference other views
 
-Same pattern for views → `google_bigquery_table`:
+Views also have a creation order dependency. In this example, `myview2` references `myview1`, and `myview3` references `myview2`.
+
+Suppose the following SQL files:
 
 {{ codefile "sql" "examples/data-sources/bqutils_dependency_layering/mydataset1.myview1.sql" }}
 
 {{ codefile "sql" "examples/data-sources/bqutils_dependency_layering/mydataset1.myview2.sql" }}
 
 {{ tffile "examples/data-sources/bqutils_dependency_layering/data-source.views.tf" }}
-
-If `max_layers` is greater than the waves you declared, add more `lN` resources (and `depends_on` chains) before apply.
 
 {{ .SchemaMarkdown | trimspace }}
