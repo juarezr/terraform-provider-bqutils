@@ -52,11 +52,11 @@ build: ${BINARY} ## Compile the project source code
 
 .PHONY: test
 test: ## Run the unit tests
-	go test ./... -v -count=1
+	go test ./... -v -count=1 -timeout 10m
 
 .PHONY: testacc
 testacc: ## Run the acceptance tests
-	TF_ACC=1 go test ./... -v -count=1 -timeout 120m
+	TF_ACC=1 go test ./... -v -count=1 -timeout 11m
 
 .PHONY: clean-build
 clean-build: ## Clean the build artifacts
@@ -86,14 +86,13 @@ validate: generate ## Validate the project documentation
 
 #region Coverage -----------------------------------------------------------------------
 
-coverage-sqlparse.cover: $(SQLPARSE_SRCS)
-	go test ./internal/sqlparse/ -count=1 -coverprofile=coverage-sqlparse.cover -covermode=atomic
+COVERAGE_SRCS := $(filter-out %_test.go,${BUILDING_SRCS})
 
-coverage-provider.cover: $(PROVIDER_SRCS) $(PACKAGES_SRCS)
-	TF_ACC=1 go test ./internal/provider/ -count=1 -timeout 20m -coverprofile=coverage-provider.cover -covermode=atomic
+coverage.cover: $(COVERAGE_SRCS)
+	TF_ACC=1 go test ./... -count=1 -timeout 12m -coverprofile=coverage.cover -covermode=atomic
 
-coverage.out: coverage-sqlparse.cover coverage-provider.cover
-	gocovmerge coverage-sqlparse.cover coverage-provider.cover > coverage.out
+coverage.out: coverage.cover
+	gocovmerge coverage.cover > coverage.out
 
 coverage.xml: coverage.out
 	gocover-cobertura < coverage.out > coverage.xml
