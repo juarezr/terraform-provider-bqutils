@@ -1,6 +1,5 @@
 ---
 page_title: "{{.Name}} Data Source - {{.ProviderName}}"
-subcategory: ""
 description: |-
   {{ .Description | trimspace }}
 ---
@@ -35,6 +34,8 @@ Suppose the following SQL files:
 
 {{ codefile "sql" "examples/data-sources/bqutils_dependency_layering/mydataset1.myfunction2.sql" }}
 
+{{ codefile "sql" "examples/data-sources/bqutils_dependency_layering/mydataset1.myfunction3.sql" }}
+
 To let terraform create the resources in the correct order, we can use the `bqutils_dependency_layering` datasource to keep track of which routines call other routines and compute the layers and then create the resources in the correct order.
 
 To do this, one can follow these steps:
@@ -60,6 +61,10 @@ Suppose the following SQL files:
 {{ codefile "sql" "examples/data-sources/bqutils_dependency_layering/mydataset1.myview1.sql" }}
 
 {{ codefile "sql" "examples/data-sources/bqutils_dependency_layering/mydataset1.myview2.sql" }}
+
+{{ codefile "sql" "examples/data-sources/bqutils_dependency_layering/mydataset1.myview3.sql" }}
+
+The terraform code to create the resources in the correct order would be:
 
 {{ tffile "examples/data-sources/bqutils_dependency_layering/data-source.views.tf" }}
 

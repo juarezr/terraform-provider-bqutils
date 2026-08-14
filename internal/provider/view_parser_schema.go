@@ -41,6 +41,10 @@ func viewParserSchema() schema.Schema {
 				MarkdownDescription: "Table/view id parsed from the SQL statement.",
 				Computed:            true,
 			},
+			"reference_id": schema.StringAttribute{
+				MarkdownDescription: "Join key `<dataset_id>.<table_id>` for dependency tracking and layering dependency layering (same as filename / layering convention). Null when dataset_id is absent. Distinct from the GCP-path `id`.",
+				Computed:            true,
+			},
 			"query": schema.StringAttribute{
 				MarkdownDescription: "View query body after the AS element in the SQL statement.",
 				Computed:            true,

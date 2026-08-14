@@ -39,6 +39,7 @@ type layeredReferenceModel struct {
 	ObjectID     types.String `tfsdk:"object_id"`
 	ObjectType   types.String `tfsdk:"object_type"`
 	ResourceType types.String `tfsdk:"resource_type"`
+	ReferenceID  types.String `tfsdk:"reference_id"`
 }
 
 func (d *DependencyLayeringDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -121,6 +122,9 @@ func (d *DependencyLayeringDataSource) Schema(_ context.Context, _ datasource.Sc
 						"resource_type": schema.StringAttribute{
 							MarkdownDescription: "Values are `ROUTINE` or `VIEW`. It is computed from the `object_type` attribute (can be used by the layering terraform code to filter the objects by resource type and assign them to the correct resource block).",
 							Computed:            true,
+						},
+						"reference_id": schema.StringAttribute{
+							MarkdownDescription: "Join key `<dataset_id>.<object_id>` matching parser `reference_id` and filename / for_each conventions. Use as the map key when looking up the object from the parser instances in each layer/stage.",
 							Computed:            true,
 						},
 					},
@@ -182,6 +186,7 @@ func (d *DependencyLayeringDataSource) Read(ctx context.Context, req datasource.
 		"object_id":     types.StringType,
 		"object_type":   types.StringType,
 		"resource_type": types.StringType,
+		"reference_id":  types.StringType,
 	}}
 	layeredModels := make([]layeredReferenceModel, 0, len(result.Layered))
 	for _, n := range result.Layered {
@@ -191,6 +196,7 @@ func (d *DependencyLayeringDataSource) Read(ctx context.Context, req datasource.
 			ObjectID:     types.StringValue(n.ObjectID),
 			ObjectType:   types.StringValue(n.ObjectType),
 			ResourceType: types.StringValue(n.ResourceType),
+			ReferenceID:  referenceID(n.DatasetID, n.ObjectID),
 		})
 	}
 	layered, diags := types.ListValueFrom(ctx, layeredType, layeredModels)

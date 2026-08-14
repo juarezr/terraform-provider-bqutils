@@ -45,6 +45,10 @@ func routineParserSchema() schema.Schema {
 				MarkdownDescription: "Name of the routine parsed from the SQL statement.",
 				Computed:            true,
 			},
+			"reference_id": schema.StringAttribute{
+				MarkdownDescription: "Join key `<dataset_id>.<routine_id>` for dependency tracking and layering (same as filename / layering convention). Null when dataset_id is absent. Distinct from the GCP-path `id`.",
+				Computed:            true,
+			},
 			"routine_type": schema.StringAttribute{
 				MarkdownDescription: "SCALAR_FUNCTION, TABLE_VALUED_FUNCTION, PROCEDURE, or AGGREGATE_FUNCTION.",
 				Computed:            true,
