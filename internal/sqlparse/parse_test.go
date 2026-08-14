@@ -606,3 +606,16 @@ END
 		t.Fatalf("body=%q", res.DefinitionBody)
 	}
 }
+
+func TestParseOptionsEscapedString(t *testing.T) {
+	sql := `CREATE FUNCTION mydataset.fn(x INT64) RETURNS INT64
+OPTIONS(description = 'it\'s a helper')
+AS (x);`
+	res, err := ParseRoutine(sql, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Description != "it's a helper" {
+		t.Fatalf("desc=%q", res.Description)
+	}
+}

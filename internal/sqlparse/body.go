@@ -177,10 +177,10 @@ func captureBeginEndBody(input string, i, line, col int) (string, int, *ParseErr
 		}
 		if isIdentStart(rune(c)) {
 			wordStart := i
-			r, size := utf8.DecodeRuneInString(input[i:])
+			_, size := utf8.DecodeRuneInString(input[i:])
 			i += size
 			for i < len(input) {
-				r, size = utf8.DecodeRuneInString(input[i:])
+				r, size := utf8.DecodeRuneInString(input[i:])
 				if !isIdentPart(r) {
 					break
 				}

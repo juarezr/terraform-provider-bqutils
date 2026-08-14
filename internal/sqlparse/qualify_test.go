@@ -171,6 +171,21 @@ func TestQualifyBody_noRewriteViews(t *testing.T) {
 	}
 }
 
+func TestQualifyBody_backtickAlias(t *testing.T) {
+	body := "SELECT * FROM mydataset8.events AS `evt`"
+	got := QualifyBody(body, QualifyOptions{
+		TargetProject: "p",
+		HomeDataset:   "mydataset1",
+		Rewrite:       true,
+	})
+	if !reflect.DeepEqual(got.DatasetReferences, []string{"mydataset8"}) {
+		t.Fatalf("refs=%v", got.DatasetReferences)
+	}
+	if !strings.Contains(got.Body, "`p`.`mydataset8`.`events` AS `evt`") {
+		t.Fatalf("backtick alias rewrite: %q", got.Body)
+	}
+}
+
 func TestQualifyBody_unnestAndCTE(t *testing.T) {
 	body := `
 WITH tab AS (
