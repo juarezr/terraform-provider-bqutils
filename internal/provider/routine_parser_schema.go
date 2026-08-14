@@ -58,6 +58,7 @@ func routineParserSchema() schema.Schema {
 				MarkdownDescription: "Distinct dataset IDs referenced in definition_body that differ from the routine's own dataset. Empty when the body only uses the home dataset. Useful with google_bigquery_dataset_access for authorized routines.",
 				Computed:            true,
 			},
+			"references": objectReferencesSchema("Objects referenced in definition_body (routines, views, tables), unique and sorted by dataset_id then object_id. Excludes self-references. Use with bqutils_dependency_layering for creation-order waves."),
 			"language": schema.StringAttribute{
 				MarkdownDescription: "The language of the routine. Possible values: SQL, JAVASCRIPT, PYTHON, JAVA, SCALA.",
 				Computed:            true,

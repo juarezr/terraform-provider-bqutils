@@ -39,9 +39,10 @@ requirements: ## Check the required tools are installed
 #region Build and Test -----------------------------------------------------------------
 
 SQLPARSE_SRCS := $(wildcard internal/sqlparse/*.go)
+DEPTRACK_SRCS := $(wildcard internal/deptrack/*.go)
 PROVIDER_SRCS := $(wildcard internal/provider/*.go) main.go
 PACKAGES_SRCS := go.mod go.sum
-BUILDING_SRCS := $(SQLPARSE_SRCS) $(PROVIDER_SRCS) $(PACKAGES_SRCS)
+BUILDING_SRCS := $(SQLPARSE_SRCS) $(DEPTRACK_SRCS) $(PROVIDER_SRCS) $(PACKAGES_SRCS)
 
 ${BINARY}: $(BUILDING_SRCS)
 	go build -o ${BINARY}

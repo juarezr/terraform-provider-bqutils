@@ -60,5 +60,6 @@ func (p *BqutilsProvider) DataSources(_ context.Context) []func() datasource.Dat
 	return []func() datasource.DataSource{
 		NewRoutineParserDataSource,
 		NewViewParserDataSource,
+		NewDependencyLayeringDataSource,
 	}
 }

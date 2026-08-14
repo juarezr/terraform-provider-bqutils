@@ -169,6 +169,11 @@ func TestAccRoutineParser_targetProjectRewrite(t *testing.T) {
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_id", "mydataset1"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_references.#", "1"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "dataset_references.0", "mydataset2"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "references.#", "1"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "references.0.dataset_id", "mydataset2"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "references.0.object_id", "array_distinct"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "references.0.object_type", "SCALAR_FUNCTION"),
+					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "references.0.resource_type", "ROUTINE"),
 					resource.TestCheckResourceAttr("data.bqutils_routine_parser.test", "definition_body", "SELECT `env-proj`.`mydataset2`.`array_distinct`([1, 1, 2]) AS unique_items"),
 				),
 			},
@@ -218,6 +223,13 @@ func TestAccViewParser_datasetReferences(t *testing.T) {
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "dataset_references.#", "2"),
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "dataset_references.0", "mydataset2"),
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "dataset_references.1", "mydataset3"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "references.#", "2"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "references.0.dataset_id", "mydataset2"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "references.0.object_id", "eventkind"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "references.0.object_type", "VIEW"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "references.0.resource_type", "VIEW"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "references.1.dataset_id", "mydataset3"),
+					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "references.1.object_id", "eventclass"),
 					resource.TestMatchResourceAttr("data.bqutils_view_parser.test", "query", regexp.MustCompile(`FROM mydataset2\.eventkind`)),
 					resource.TestMatchResourceAttr("data.bqutils_view_parser.test", "query", regexp.MustCompile(`JOIN mydataset3\.eventclass`)),
 				),
@@ -336,6 +348,92 @@ func TestAccViewParser_idFullyQualified(t *testing.T) {
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "dataset_id", "mydataset"),
 					resource.TestCheckResourceAttr("data.bqutils_view_parser.test", "id", "projects/myproj/datasets/mydataset/tables/v"),
 				),
+			},
+		},
+	})
+}
+
+func TestAccDependencyLayering_chain(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: `
+					data "bqutils_routine_parser" "a" {
+						sql = <<-EOF
+							CREATE FUNCTION mydataset1.fn_a() RETURNS INT64 AS (1);
+						EOF
+					}
+					data "bqutils_routine_parser" "b" {
+						sql = <<-EOF
+							CREATE FUNCTION mydataset1.fn_b() RETURNS INT64 AS (mydataset1.fn_a());
+						EOF
+					}
+					data "bqutils_dependency_layering" "test" {
+						source_references = [
+							{
+								dataset_id  = data.bqutils_routine_parser.a.dataset_id
+								object_id   = data.bqutils_routine_parser.a.routine_id
+								object_type = data.bqutils_routine_parser.a.routine_type
+								references  = data.bqutils_routine_parser.a.references
+							},
+							{
+								dataset_id  = data.bqutils_routine_parser.b.dataset_id
+								object_id   = data.bqutils_routine_parser.b.routine_id
+								object_type = data.bqutils_routine_parser.b.routine_type
+								references  = data.bqutils_routine_parser.b.references
+							},
+						]
+					}
+				`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.bqutils_dependency_layering.test", "max_layers", "2"),
+					resource.TestCheckResourceAttr("data.bqutils_dependency_layering.test", "layered_references.#", "2"),
+					resource.TestCheckResourceAttr("data.bqutils_dependency_layering.test", "layered_references.0.layer", "1"),
+					resource.TestCheckResourceAttr("data.bqutils_dependency_layering.test", "layered_references.0.object_id", "fn_a"),
+					resource.TestCheckResourceAttr("data.bqutils_dependency_layering.test", "layered_references.0.resource_type", "ROUTINE"),
+					resource.TestCheckResourceAttr("data.bqutils_dependency_layering.test", "layered_references.1.layer", "2"),
+					resource.TestCheckResourceAttr("data.bqutils_dependency_layering.test", "layered_references.1.object_id", "fn_b"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccDependencyLayering_cycle(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: `
+					data "bqutils_dependency_layering" "test" {
+						source_references = [
+							{
+								dataset_id  = "d"
+								object_id   = "a"
+								object_type = "SCALAR_FUNCTION"
+								references  = [{
+									dataset_id    = "d"
+									object_id     = "b"
+									object_type   = "SCALAR_FUNCTION"
+									resource_type = "ROUTINE"
+								}]
+							},
+							{
+								dataset_id  = "d"
+								object_id   = "b"
+								object_type = "SCALAR_FUNCTION"
+								references  = [{
+									dataset_id    = "d"
+									object_id     = "a"
+									object_type   = "SCALAR_FUNCTION"
+									resource_type = "ROUTINE"
+								}]
+							},
+						]
+					}
+				`,
+				ExpectError: regexp.MustCompile(`cyclic`),
 			},
 		},
 	})
